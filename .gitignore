@@ -1,0 +1,16 @@
+# Individual-level data and intermediate files must never be committed
+data/
+work/
+output/
+*.xlsx
+*.xls
+*.rds
+*.RData
+*.Rhistory
+*.sav
+*.dta
+*.sas7bdat
+*.csv
+!reference/lifetable/japan_lifetable_qx.csv
+.Rproj.user/
+renv/library/
