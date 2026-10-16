@@ -28,6 +28,7 @@ for (k in names(cohorts)) {
     fit_rows <- which(!is.na(Yobs[, j]) & prev < 6)
     assign("FIT_LOG", fit_log_new(), envir = globalenv())
     tp <- suppressWarnings(fit_twopart(design_Z(X, prev, Y, j), Yobs[, j], fit_rows))
+    if (!inherits(tp$mrs$fit, "polr")) next                     # 2 or fewer survivor mRS categories (no threshold ordering issue)
     fm <- tp$mrs$fit; z <- fm$zeta; V <- vcov(fm); iz <- (length(coef(fm)) + 1):nrow(V); Vz <- V[iz, iz]
     pr <- sapply(seq_len(length(z) - 1), function(i)
       pnorm(-(z[i + 1] - z[i]) / sqrt(Vz[i, i] + Vz[i + 1, i + 1] - 2 * Vz[i, i + 1])))

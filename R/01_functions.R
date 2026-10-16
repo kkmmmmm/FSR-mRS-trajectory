@@ -148,21 +148,41 @@ fit_twopart <- function(Z, y, fit_rows) {
     death <- list(fit = fd, cols = cd)
   }
   s_rows <- fit_rows[y[fit_rows] < 6]
+  if (!length(s_rows)) stop("No survivors at this time point (the survivor mRS model cannot be fitted)")
   cm <- usable_cols(Z, s_rows); Zm <- Z[s_rows, cm, drop = FALSE]; ym <- factor(y[s_rows])
-  fm <- fit_quiet(polr(ym ~ Zm, Hess = TRUE, method = "logistic"), "m")
-  if (is.null(fm)) stop("polr (survivors) failed")
-  if (fm$convergence != 0) fit_log_add("m_nonconv")
-  list(death = death, p_death_const = mean(d), mrs = list(fit = fm, cols = sub("^Zm", "", names(coef(fm))), lev = as.numeric(levels(ym))))
+  lev <- as.numeric(levels(ym))
+  if (length(lev) >= 3) {                                          # usual case: proportional-odds model
+    fm <- fit_quiet(polr(ym ~ Zm, Hess = TRUE, method = "logistic"), "m")
+    if (is.null(fm)) stop("polr (survivors) failed")
+    if (fm$convergence != 0) fit_log_add("m_nonconv")
+    mrs <- list(fit = fm, beta = coef(fm), zeta = fm$zeta, V = tryCatch(vcov(fm), error = function(e) NULL),
+                cols = sub("^Zm", "", names(coef(fm))), lev = lev)
+  } else if (length(lev) == 2) {                                   # only 2 survivor mRS categories: polr() cannot be fitted, so the same
+    fg <- fit_quiet(glm(as.integer(ym == levels(ym)[2]) ~ Zm, family = binomial()), "m")   # model (one threshold) is fitted by logistic regression
+    if (is.null(fg)) stop("glm (survivors, 2 categories) failed")
+    if (!fg$converged) fit_log_add("m_nonconv")
+    ok <- !is.na(coef(fg))
+    J <- diag(c(-1, rep(1, sum(ok) - 1)), sum(ok))[c(seq_len(sum(ok))[-1], 1), , drop = FALSE]   # (α, b) -> (β = b, ζ = −α)
+    V <- tryCatch(J %*% vcov(fg)[ok, ok] %*% t(J), error = function(e) NULL)
+    mrs <- list(fit = fg, beta = coef(fg)[ok][-1], zeta = setNames(-coef(fg)[[1]], paste(levels(ym), collapse = "|")), V = V,
+                cols = sub("^Zm", "", names(coef(fg))[ok][-1]), lev = lev)
+  } else {                                                         # only 1 survivor mRS category: fixed at that value
+    mrs <- list(fit = NULL, beta = numeric(0), zeta = numeric(0), V = NULL, cols = character(0), lev = lev)
+  }
+  list(death = death, p_death_const = mean(d), mrs = mrs)
 }
 
 # Death probability (coefficients b: intercept + columns) and cumulative probabilities of mRS among survivors -> category probabilities
+#   At a time point with zero deaths (or all deaths), no death model is fitted and the probability is fixed at the observed proportion (0 or 1);
+#   adding δ then does not change the death probability (in the study data, every cohort and time point had at least 40 deaths, so this did not occur)
 p_death_from <- function(tp, Z, rows, b = NULL, delta = 0) {
-  if (is.null(tp$death)) return(rep(tp$p_death_const, length(rows)))          # time point with zero deaths (or all deaths)
+  if (is.null(tp$death)) return(rep(tp$p_death_const, length(rows)))
   if (is.null(b)) b <- coef(tp$death$fit)
   plogis(as.vector(cbind(1, Z[rows, tp$death$cols, drop = FALSE]) %*% b) + delta)
 }
 p_mrs_from <- function(tp, Z, rows, beta = NULL, zeta = NULL, delta = 0) {
-  if (is.null(beta)) { beta <- coef(tp$mrs$fit); zeta <- tp$mrs$fit$zeta }
+  if (!length(tp$mrs$zeta)) return(matrix(1, length(rows), 1))                  # only 1 survivor mRS category
+  if (is.null(beta)) { beta <- tp$mrs$beta; zeta <- tp$mrs$zeta }
   eta <- as.vector(Z[rows, tp$mrs$cols, drop = FALSE] %*% beta) + delta
   cum <- plogis(outer(-eta, zeta, "+"))                                         # P(Y <= k | alive)
   cbind(cum, 1) - cbind(0, cum)
@@ -181,9 +201,10 @@ twopart_draw <- function(Z, y, fit_rows, todo, delta_d = 0, delta_m = 0, no_deat
   if (!is.null(no_death)) pd[no_death] <- 0
   dead <- runif(length(todo)) < pd
   # (2) mRS 0–5 among survivors
-  fm <- tp$mrs$fit; p <- length(tp$mrs$cols)
-  th <- draw_coef(c(coef(fm), fm$zeta), tryCatch(vcov(fm), error = function(e) NULL), "m")
   out <- rep(6L, length(todo))
+  if (!length(tp$mrs$zeta)) { out[!dead] <- tp$mrs$lev; return(out) }            # only 1 survivor mRS category
+  p <- length(tp$mrs$cols)
+  th <- draw_coef(c(tp$mrs$beta, tp$mrs$zeta), tp$mrs$V, "m")                    # drawn even if all are dead, to keep the random-number stream
   if (any(!dead)) out[!dead] <- draw_cat(p_mrs_from(tp, Z, todo[!dead], th[seq_len(p)], sort(th[-seq_len(p)]), delta_m), tp$mrs$lev)
   out
 }
@@ -317,7 +338,10 @@ regenerate_mnar_once <- function(Yobs, X, mrs_dc, delta_d, delta_m) {
 }
 
 # Predictor matrix of the imputation model at time point j: patient characteristics X, preceding mRS (categorical), and mRS at all earlier time points (numeric)
+#   At j = 1 the preceding mRS is the discharge mRS, so the numeric mrs_dc is removed from X and entered only as categorical
+#   (the same predictor set as mice.impute.twopart() under MAR; entering both would change the pseudo-observation regularization relative to MAR)
 design_Z <- function(X, prev, Y, j) {
+  if (j == 1) X <- X[, colnames(X) != "mrs_dc", drop = FALSE]
   P <- model.matrix(~ factor(pmin(prev, 5), levels = 0:5))[, -1, drop = FALSE]
   colnames(P) <- paste0("prev", 1:5)
   L <- if (j >= 3) Y[, seq_len(j - 2), drop = FALSE] else NULL   # mRS at all time points 2 or more earlier (numeric; discharge mRS is in X)
@@ -429,7 +453,7 @@ pool_logit <- function(P, U, Pa, Ua, n) {
   m <- length(P)
   if (all(P == P[1]) && P[1] %in% c(0, 1)) {
     wl <- wilson(round(P[1] * n), n)
-    return(c(est = P[1], lcl = wl[["lcl"]], ucl = wl[["ucl"]], fmi = 0))
+    return(c(est = P[1], lcl = wl[["lcl"]], ucl = wl[["ucl"]], lambda = 0))
   }
   bd <- P <= 0 | P >= 1
   pp <- ifelse(bd, Pa, P); uu <- ifelse(bd, Ua, U)
@@ -437,7 +461,7 @@ pool_logit <- function(P, U, Pa, Ua, n) {
   qbar <- mean(q); W <- mean(u); B <- if (m > 1) var(q) else 0
   Tt <- W + (1 + 1 / m) * B; lam <- (1 + 1 / m) * B / Tt
   ci <- plogis(qbar + c(-1, 1) * qt(0.975, max(br_df(lam, m, n), 1)) * sqrt(Tt))
-  c(est = plogis(qbar), lcl = ci[1], ucl = ci[2], fmi = lam)
+  c(est = plogis(qbar), lcl = ci[1], ucl = ci[2], lambda = lam)   # lambda = (1 + 1/M)B/T (proportion of between-imputation variance; distinct from the finite-sample-corrected FMI)
 }
 pool_std <- function(Pm, Um, Pa, Ua, n) {
   m <- length(Pm)
@@ -449,7 +473,7 @@ pool_std <- function(Pm, Um, Pa, Ua, n) {
   q <- qlogis(pp); u <- uu / (pp * (1 - pp))^2
   Tt <- mean(u) + (1 + 1 / m) * (if (m > 1) var(q) else 0)        # total variance on the logit scale (same as pool_logit)
   p <- r[["est"]]
-  c(r, var_raw = Tt * (p * (1 - p))^2, df_raw = max(br_df(r[["fmi"]], m, n), 1))   # delta method to the probability scale (for differences)
+  c(r, var_raw = Tt * (p * (1 - p))^2, df_raw = max(br_df(r[["lambda"]], m, n), 1))   # delta method to the probability scale (for differences)
 }
 estimate_std <- function(Ylist, rows_s, w, tp, outcomes = c("Alive", "mRS 0-2"), times = tp$year) {
   ns <- lengths(rows_s)
@@ -473,6 +497,7 @@ estimate_std <- function(Ylist, rows_s, w, tp, outcomes = c("Alive", "mRS 0-2"),
 #   mean_est = TRUE: only the point estimate is the mean proportion across imputations (each mRS 0–6 category, so the distribution sums to 100%;
 #   confidence intervals are not shown in the paper)
 pool_prop <- function(p, n, mean_est = FALSE) {
+  if (n == 0) return(c(est = NA_real_, lcl = NA_real_, ucl = NA_real_, lambda = NA_real_))   # group with 0 patients
   pa <- (p * n + 0.5) / (n + 1)
   r <- pool_logit(p, p * (1 - p) / n, pa, pa * (1 - pa) / (n + 1), n)
   if (mean_est) r["est"] <- mean(p)
@@ -480,7 +505,7 @@ pool_prop <- function(p, n, mean_est = FALSE) {
 }
 
 wilson <- function(x, n) {
-  if (n == 0) return(c(est = NA, lcl = NA, ucl = NA))
+  if (n == 0) return(c(est = NA_real_, lcl = NA_real_, ucl = NA_real_))
   z <- qnorm(0.975); p <- x / n
   c0 <- p + z^2 / (2 * n); r <- z * sqrt(p * (1 - p) / n + z^2 / (4 * n^2)); dd <- 1 + z^2 / n
   c(est = p, lcl = (c0 - r) / dd, ucl = (c0 + r) / dd)
@@ -501,9 +526,9 @@ estimate_mi <- function(Ylist, base, tp, groups = names(GROUPS)) {
       for (o in OUTCOMES) {
         p <- if (j == 1) rep(mean(outcome_indicator(mrs_dc[rows], o)), length(Ylist))
              else vapply(Ylist, function(Y) mean(outcome_indicator(Y[rows, j - 1], o)), numeric(1))
-        r <- if (j == 1) c(wilson(sum(outcome_indicator(mrs_dc[rows], o)), n), fmi = 0) else pool_prop(p, n, mean_est = !o %in% c("mRS 0-2", "Alive"))
+        r <- if (j == 1) c(wilson(sum(outcome_indicator(mrs_dc[rows], o)), n), lambda = 0) else pool_prop(p, n, mean_est = !o %in% c("mRS 0-2", "Alive"))
         out[[length(out) + 1]] <- data.frame(group = g, time = times[j], time_lab = labs[j], outcome = o,
-                                             n = n, est = r["est"], lcl = r["lcl"], ucl = r["ucl"], fmi = r["fmi"])
+                                             n = n, est = r["est"], lcl = r["lcl"], ucl = r["ucl"], lambda = r["lambda"])
       }
     }
   }
@@ -549,7 +574,7 @@ imputation_model_diag <- function(imp, coh, b = 1, K = 5) {
     list(diag = data.frame(time_lab = coh$tp$lab[j], n_fit = length(fit_rows), deaths = sum(dth), n_imputed = length(todo),
                            death_model = !is.null(tp$death),
                            death_converged = if (is.null(tp$death)) NA else tp$death$fit$converged,
-                           mrs_converged = tp$mrs$fit$convergence == 0, mrs_hessian_pd = isTRUE(ev(tp$mrs$fit$Hessian) > 0),
+                           mrs_converged = if (inherits(tp$mrs$fit, "polr")) tp$mrs$fit$convergence == 0 else NA, mrs_hessian_pd = if (inherits(tp$mrs$fit, "polr")) isTRUE(ev(tp$mrs$fit$Hessian) > 0) else NA,
                            warn_death = unname(lg["d_warn"]), warn_mrs = unname(lg["m_warn"]),
                            max_abs_coef_death = if (is.null(tp$death)) NA else max(abs(coef(tp$death$fit)[-1])),
                            max_se_death = if (is.null(tp$death)) NA else max(sqrt(diag(vcov(tp$death$fit)))),
@@ -575,7 +600,7 @@ estimate_cc <- function(Yobs, base, tp, groups = names(GROUPS)) {
         y <- if (j == 1) mrs_dc[rows] else Yobs[rows, j - 1]
         r <- wilson(sum(outcome_indicator(y, o)), length(rows))
         out[[length(out) + 1]] <- data.frame(group = g, time = times[j], time_lab = labs[j], outcome = o,
-                                             n = length(rows), est = r["est"], lcl = r["lcl"], ucl = r["ucl"], fmi = NA)
+                                             n = length(rows), est = r["est"], lcl = r["lcl"], ucl = r["ucl"], lambda = NA)
       }
     }
   }
@@ -589,9 +614,9 @@ estimate_km_observed <- function(Yobs, base, tp) {
     rows <- GROUPS[[g]](base)
     fit <- survfit(Surv(t, d) ~ 1, data = ts[rows, ], conf.type = "log-log")
     s <- summary(fit, times = tp$year, extend = TRUE)
-    rbind(data.frame(group = g, time = 0, time_lab = "D/C", outcome = "Alive", n = sum(rows), est = 1, lcl = 1, ucl = 1, fmi = NA),
+    rbind(data.frame(group = g, time = 0, time_lab = "D/C", outcome = "Alive", n = sum(rows), est = 1, lcl = 1, ucl = 1, lambda = NA),
           data.frame(group = g, time = tp$year, time_lab = tp$lab, outcome = "Alive", n = s$n.risk,
-                     est = s$surv, lcl = s$lower, ucl = s$upper, fmi = NA))
+                     est = s$surv, lcl = s$lower, ucl = s$upper, lambda = NA))
   }))
 }
 

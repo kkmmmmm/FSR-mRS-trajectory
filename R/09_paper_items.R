@@ -6,7 +6,10 @@
 #              and 15-year outcomes by discharge mRS), Figure 1 (mRS distribution at each assessment), Figure 2 (how the
 #              15 years were spent by discharge mRS), Figure 3 (survival and independent survival over time),
 #              Figure 4 (how the 15 years were spent by age group)
-#   Supplemental Material: Tables S2–S11, Figures S1–S4 (Table S1, the list of imputation-model predictors, is written directly in the Supplemental Material)
+#   Supplemental Material: Tables S2–S6, Figures S1–S4 (Table S1, the list of imputation-model predictors, is written directly in the Supplemental Material)
+#   Zenodo: Tables Z1–Z5 (moved from the Supplement on 2026-10-15)
+#   - The object names below (s4 to s11) and the keys in paper_values.json ("Table S4", etc.) keep the numbers used before the move.
+#     The correspondence with the manuscript numbers is given by PAPER_NO.
 #   - Estimates come from 04_estimates.R (work/estimates_all.rds), 05_prestroke.R (estimates_prestroke02.rds), and 06_years_lived.R (estimates_years.rds).
 #     Only the proportions by 4 age groups × discharge mRS and the differences between onset-period cohorts are aggregated here
 #     from the imputed data (MAR) (imputation is not rerun).
@@ -90,13 +93,13 @@ for (ch in chs) { x <- ch$data; R <- complete.cases(x[, ch$tp$col]); G <- G_OF[[
                        med(z$bmi, 1), npct(z$prior_stroke == 1), med(z$mrs_dc))
   s3[[sprintf("%s: complete (n=%s)", G, big(sum(R)))]] <- one(x[R, ]); s3[[sprintf("%s: lost to follow-up (n=%s)", G, big(sum(!R)))]] <- one(x[!R, ]) }
 
-# ---- Table S4: mRS 0–6 distribution at each assessment by discharge mRS in G1 (%; mean across imputations) ------------------------------------
+# ---- Former Table S4 (Zenodo Table Z1 in the paper): mRS 0–6 distribution at each assessment by discharge mRS in G1 (%; mean across imputations) ------------------------------------
 s4 <- e15 %>% filter(group %in% c("All", G6), outcome %in% paste0("mRS ", 0:6)) %>%
   mutate(val = fmt_pct(est), Group = sprintf("%s (n = %s)", ifelse(group == "All", "All patients", group), big(n)), Time = time_lab_en(time_lab)) %>%
   select(group, time, Group, Time, outcome, val) %>% tidyr::pivot_wider(names_from = outcome, values_from = val) %>%
   arrange(match(group, c("All", G6)), time) %>% select(-group, -time) %>% rename(`mRS 6 (death)` = `mRS 6`) %>% as.data.frame(check.names = FALSE)
 
-# ---- Table S5: survival and independent survival by discharge mRS in G1 (1, 5, 10, 15 y), range under missing-data assumptions, applied to recent case mix ----------
+# ---- Former Table S5 (Zenodo Table Z2 in the paper): survival and independent survival by discharge mRS in G1 (1, 5, 10, 15 y), range under missing-data assumptions, applied to recent case mix ----------
 OUTL <- c("Alive" = "Survival", "mRS 0-2" = "Independent survival (alive with mRS 0–2)")
 s5 <- do.call(rbind, lapply(names(OUTL), function(o) do.call(rbind, lapply(G9, function(g)
   data.frame(Outcome = OUTL[[o]], `Discharge mRS` = glab(g), n = big(pick("MAR", g, o, 1)$n),
@@ -104,7 +107,7 @@ s5 <- do.call(rbind, lapply(names(OUTL), function(o) do.call(rbind, lapply(G9, f
              `15 y: range under missing-data assumptions` = rng15(g, o),
              `15 y: applied to recent case mix [range]` = rec_cell(g, ifelse(o == "Alive", "p15_alive", "p15_indep")), check.names = FALSE)))))
 
-# ---- Table S6: discharge mRS × 4 age groups. A = survival and independent survival (aggregated from imputed data), B = years over 15 years -------------------
+# ---- Former Table S6 (Zenodo Table Z3 in the paper): discharge mRS × 4 age groups. A = survival and independent survival (aggregated from imputed data), B = years over 15 years -------------------
 DCG <- c(list("All" = 0:5, "Discharge mRS 0-2" = 0:2, "Discharge mRS 3-5" = 3:5), setNames(as.list(0:5), G6))
 add <- list()
 for (dg in names(DCG)) for (a in AGE_LABELS)
@@ -127,7 +130,7 @@ ytab <- function(y, first) cbind(first, data.frame(n = big(y$n), `Years alive` =
   `Years alive and independent` = yci(y$indep_est, y$indep_lcl, y$indep_ucl), `Years alive and dependent` = yci(y$dep_est, y$dep_lcl, y$dep_ucl), check.names = FALSE))
 s6b <- ytab(yrs$by_age, data.frame(`Discharge mRS` = glab(yrs$by_age$group), `Age group` = AGE_EN[yrs$by_age$age], check.names = FALSE))
 
-# ---- Table S7: by sex (unadjusted and standardized to the overall G1 age distribution) ---------------------------------------------------------
+# ---- Former Table S7 (Zenodo Table Z4 in the paper): by sex (unadjusted and standardized to the overall G1 age distribution) ---------------------------------------------------------
 ys <- yrs$by_sex; ps <- yrs$p15_sex_std
 s7 <- do.call(rbind, lapply(c("All patients", "Discharge mRS 0-2", "Discharge mRS 3-5"), function(g) do.call(rbind, lapply(c("Men", "Women", "Men − Women"), function(s) {
   u <- ys[ys$group == g & ys$sex == s & ys$type == "Unadjusted", ]; a <- ys[ys$group == g & ys$sex == s & ys$type == "Age-standardized", ]
@@ -139,7 +142,7 @@ s7 <- do.call(rbind, lapply(c("All patients", "Discharge mRS 0-2", "Discharge mR
              `Years dependent (age-standardized)` = yy(a, "dep"),
              `Independent at 15 y, % (age-standardized)` = if (dif) "–" else fmt_ci(p$est, p$lcl, p$ucl), check.names = FALSE) }))))
 
-# ---- Table S8: patients independent before stroke (prestroke mRS 0–2). A = proportions (estimates from 05_prestroke.R), B = years ---------------------------------
+# ---- Former Table S8 (Table S4 in the paper): patients independent before stroke (prestroke mRS 0–2). A = proportions (estimates from 05_prestroke.R), B = years ---------------------------------
 ep <- pre$est; p35 <- pre$est_pre35 %>% filter(H == H15)
 pj_pre <- function(g, o) { v <- sapply(c("MAR", DELTA_M), function(m)
   (std_age_sex(ep, H15, H5, outcomes = o, within = if (g == "All") NULL else g, method = m) %>% filter(time == H15))$est)
@@ -157,7 +160,7 @@ s8a <- rbind(
 yp <- yrs$by_prestroke %>% filter(group %in% c("All patients", "Discharge mRS 0-2", "Discharge mRS 3-5"))
 s8b <- ytab(yp, data.frame(`Prestroke mRS` = sub("-", "–", sub("Prestroke mRS ", "", yp$prestroke)), `Discharge mRS` = glab(yp$group), check.names = FALSE))
 
-# ---- Table S9: 15-year outcomes and years independent by missing-data handling (G1) ---------------------------------------------
+# ---- Former Table S9 (Table S5 in the paper): 15-year outcomes and years independent by missing-data handling (G1) ---------------------------------------------
 ysc <- yrs$by_dc_scenario; ycc <- yrs$complete_case
 s9 <- do.call(rbind, lapply(G3S, function(g) {
   km <- pick("KM_obs", g, "Alive", H15); yy <- function(m, v = "indep") { x <- ysc[ysc$method == m & ysc$group == ykey(g), ]; x[[paste0(v, "_est")]] }
@@ -171,7 +174,7 @@ s9 <- do.call(rbind, lapply(G3S, function(g) {
   cbind(`Discharge mRS` = glab(g), x) }))
 n_cc <- sapply(G3S, function(g) pick("CC", g, "Alive", H15)$n)
 
-# ---- Table S10: characteristics of the 3 onset-period cohorts ---------------------------------------------------------------
+# ---- Former Table S10 (Table S6 in the paper): characteristics of the 3 onset-period cohorts ---------------------------------------------------------------
 bg3 <- function(x) c(big(nrow(x)), med(x$age), npct(x$male == 1), med(x$pre_mrs), med(x$nihss), "", sapply(names(TOAST_EN), function(l) npct(x$toast == l)), "",
                      npct(x$ht == 1), npct(x$dm == 1), npct(x$dl == 1), npct(x$af == 1), npct(x$smk == 1), npct(x$drk == 1), npct(x$ckd == 1),
                      npct(x$prior_stroke == 1), med(x$bmi, 1), "", npct(x$tpa == 1), npct(x$evt == 1), "", sapply(0:5, function(m) npct(x$mrs_dc == m)))
@@ -182,7 +185,7 @@ s10 <- data.frame(Characteristic = c("Patients, n", "Age, y", "Male sex", "Prest
 for (ch in chs) s10[[sprintf("%s (%d-year follow-up)", G_OF[[as.character(ch$H)]], ch$H)]] <- bg3(ch$data)
 miss3 <- sapply(c("ckd", "prior_stroke", "bmi", "tpa", "evt"), function(v) paste(sapply(chs, function(ch) sum(is.na(ch$data[[v]]))), collapse = "/"))
 
-# ---- Table S11: differences in outcomes at common time points between onset-period cohorts (per-imputation differences pooled with Rubin's rules) -----------------
+# ---- Former Table S11 (Zenodo Table Z5 in the paper): differences in outcomes at common time points between onset-period cohorts (per-imputation differences pooled with Rubin's rules) -----------------
 props <- list()
 for (k in names(cohorts)) { ch <- cohorts[[k]]; b <- ch$data[, c("mrs_dc", "age", "male")]; rows <- group_rows(b, G9)
   Yl <- readRDS(file.path(WORK_DIR, sprintf("imputations_%s.rds", k)))$imps[["delta_+0.00"]]
@@ -191,8 +194,12 @@ for (k in names(cohorts)) { ch <- cohorts[[k]]; b <- ch$data[, c("mrs_dc", "age"
   rm(Yl); gc() }
 getp <- function(H, t, g, o) Filter(function(x) x$H == H && x$t == t && x$g == g && x$o == o, props)[[1]]
 diff_rubin <- function(a, b) {               # a − b (2 independently imputed cohorts; within-imputation variance = sum of the 2 binomial variances)
+  if (a$n == 0 || b$n == 0) return(c(diff = NA_real_, lcl = NA_real_, ucl = NA_real_))           # group with 0 patients
   m <- length(a$p); dd <- a$p - b$p; U <- a$p * (1 - a$p) / a$n + b$p * (1 - b$p) / b$n
-  Tt <- mean(U) + (1 + 1 / m) * var(dd); lam <- (1 + 1 / m) * var(dd) / Tt; df <- max(br_df(lam, m, a$n + b$n - 1), 1)
+  Tt <- mean(U) + (1 + 1 / m) * var(dd)
+  if (Tt <= 0) {                                   # proportion 0 or 1 in every imputed dataset of both cohorts (variance 0): no interval
+    warning("diff_rubin: total variance is 0; confidence interval not computed"); return(c(diff = mean(dd), lcl = NA_real_, ucl = NA_real_)) }
+  lam <- (1 + 1 / m) * var(dd) / Tt; df <- max(br_df(lam, m, a$n + b$n - 1), 1)
   c(diff = mean(dd), lcl = mean(dd) - qt(0.975, df) * sqrt(Tt), ucl = mean(dd) + qt(0.975, df) * sqrt(Tt)) }
 CMP <- list("G2 − G1, 5 y" = c(10, 5), "G3 − G1, 5 y" = c(5, 5), "G2 − G1, 10 y" = c(10, 10))
 cdiff <- do.call(rbind, lapply(names(OUTL), function(o) do.call(rbind, lapply(G9, function(g) do.call(rbind, lapply(names(CMP), function(cn) {
@@ -208,7 +215,7 @@ s11[, -(1:2)] <- lapply(s11[, -(1:2)], minus); s7[] <- lapply(s7, function(x) if
 fig <- function(name) file.path(pd, paste0(name, ".png"))
 
 # ---- Figure 1: mRS distribution at each assessment in G1 (all patients top center; discharge mRS 0–5 in 2 columns × 3 rows) -------------------------
-# Values are not printed inside bars (category values are in Table S4)
+# Values are not printed inside bars (category values are in Table Z1)
 one_panel <- function(g, show_legend = FALSE) { p <- plot_trajectory(e15, grp = g, ncol = 1, values = FALSE) + labs(x = NULL, y = NULL)
   if (!show_legend) p <- p + theme(legend.position = "none"); p }
 top <- patchwork::plot_spacer() + one_panel("All", TRUE) + patchwork::plot_spacer() + patchwork::plot_layout(widths = c(0.5, 1, 0.5))
@@ -220,7 +227,7 @@ cap <- grid::textGrob("Time after stroke onset (years unless indicated)", gp = g
 save_fig(p1 / patchwork::wrap_elements(full = cap) + patchwork::plot_layout(heights = c(1, 0.025)), fig("Figure1_mRS_distribution_by_discharge_mRS"), FIG_W, 8.6)
 
 # ---- Figures 2 and 4: how the 15 years were spent (horizontal bars of years alive and independent, alive and dependent, and after death) -------------------------------
-YCOL <- c("Alive and independent (mRS 0–2)" = "#1f4e79", "Alive and dependent (mRS 3–5)" = "#e8833a", "Dead" = "#d9d9d9")
+YCOL <- c("Lived independently (mRS 0–2)" = "#1f4e79", "Lived requiring assistance (mRS 3–5)" = "#e8833a", "After death" = "#d9d9d9")
 years_bars <- function(y, labels, tag = NULL, show_x = TRUE) {
   y$lab <- factor(labels, levels = rev(labels))
   long <- rbind(data.frame(lab = y$lab, state = names(YCOL)[1], yr = y$indep_est), data.frame(lab = y$lab, state = names(YCOL)[2], yr = y$dep_est),
@@ -396,17 +403,22 @@ txt_tab <- data.frame(Key = names(V), Value = unlist(lapply(V, as.character)), r
 # =================================================================================================
 tables <- list("Table 1" = t1, "Table 2" = t2, "Table S2" = s2, "Table S3" = s3, "Table S4" = s4, "Table S5" = s5, "Table S6A" = s6a, "Table S6B" = s6b,
                "Table S7" = s7, "Table S8A" = s8a, "Table S8B" = s8b, "Table S9" = s9, "Table S10" = s10, "Table S11" = s11)
-write_xlsx_sheets(c(tables, list("Text values" = txt_tab)), file.path(pd, "Tables_main_and_supplement.xlsx"),
+# xlsx sheet names use the manuscript numbers (Zenodo Tables Z1–Z5 are built from these objects separately and are not written here)
+PAPER_NO <- c("Table 1" = "Table 1", "Table 2" = "Table 2", "Table S2" = "Table S2", "Table S3" = "Table S3",
+              "Table S8A" = "Table S4A", "Table S8B" = "Table S4B", "Table S9" = "Table S5", "Table S10" = "Table S6")
+paper_tables <- setNames(tables[names(PAPER_NO)], PAPER_NO)
+write_xlsx_sheets(c(paper_tables, list("Text values" = txt_tab)), file.path(pd, "Tables_main_and_supplement.xlsx"),
                   notes = c("Manuscript tables (sheet name = table number) and values cited in the text (Text values). Created by 09_paper_items.R from the estimates in work/. Proportions are % (95% CI); years are mean years during the 15 years after stroke onset (95% CI).",
                             "Table 1: G1 baseline characteristics (values are n (%) or median (interquartile range); denominators are non-missing patients for each variable). Table 2: years (06_years_lived.R), 15-year proportions (04_estimates.R), applied to the recent (G3) case mix (point estimate [range over δ = −1 to +1]).",
-                            "Tables S6A and S11 are aggregated here from the imputed data (MAR). Table S8A uses estimates from 05_prestroke.R. δ columns in Table S9 are point estimates. Table S1 (imputation-model predictors) is written directly in the Supplemental Material.",
+                            "Table S4A uses estimates from 05_prestroke.R. δ columns in Table S5 are point estimates. Table S1 (imputation-model predictors) is written directly in the Supplemental Material. Zenodo Tables Z1–Z5 correspond to the former Tables S4, S5, S6, S7, and S11 (all tables, under their former numbers, are in paper_values.json; Z3A and Z5 are aggregated here from the imputed data (MAR)).",
                             "– = not calculated or outside the observation period."))
 jsonlite::write_json(list(values = V, tables = lapply(tables, function(x) list(columns = names(x), rows = unname(lapply(seq_len(nrow(x)), function(i) unname(as.character(unlist(x[i, ]))))))),
                           t1_missing = as.list(t1_miss), s10_missing = as.list(miss3)),
                      file.path(pd, "paper_values.json"), auto_unbox = TRUE, pretty = TRUE)
 writeLines(c("Index of manuscript figures/tables and output files (created by 09_paper_items.R)", "",
-             "Tables 1, 2, S2–S11; values cited in text : Tables_main_and_supplement.xlsx (sheet name = table number; values cited in text = Text values)",
-             "Table S1 (imputation-model predictors)    : written directly in the Supplemental Material (missing counts as in the Table S10 footnote)",
+             "Tables 1, 2, S2–S6; values cited in text  : Tables_main_and_supplement.xlsx (sheet name = table number; values cited in text = Text values)",
+             "Tables Z1–Z5 (Zenodo)                     : former Tables S4, S5, S6, S7, S11 (in paper_values.json under their former numbers)",
+             "Table S1 (imputation-model predictors)    : written directly in the Supplemental Material (missing counts as in the Table S6 footnote)",
              "Figure 1  mRS distribution at each assessment          : Figure1_mRS_distribution_by_discharge_mRS.png / .pdf",
              "Figure 2  15 years by discharge mRS                    : Figure2_years_by_discharge_mRS.png / .pdf",
              "Figure 3  Survival and independent survival over time  : Figure3_survival_and_independent_survival_by_discharge_mRS.png / .pdf",
@@ -420,5 +432,5 @@ writeLines(c("Index of manuscript figures/tables and output files (created by 09
              "All estimates of years                                 : ../01_years_over_15y/TableY_years_alive_and_independent_over_15y_G1.xlsx (06_years_lived.R)",
              "Supplemental Methods values (imputation model comparison, delta = 0 regeneration) : ../90_diagnostics/TableD5_delta0_regeneration_and_model_comparison.xlsx (07_model_checks.R)",
              "Supplemental Methods values (probability of threshold order reversal)             : ../90_diagnostics/TableD6_threshold_order_reversal.xlsx (08_threshold_check.R)",
-             "paper_values.json                                      : the tables above and values cited in the text (values used in the manuscript text and tables, JSON)"),
+             "paper_values.json                                      : the tables above and values cited in the text (values used in the manuscript text and tables, JSON; table keys keep the former numbers S2–S11)"),
            file.path(pd, "00_index.txt"), useBytes = FALSE)

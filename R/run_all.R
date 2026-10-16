@@ -24,7 +24,7 @@ source("R/01_functions.R", encoding = "UTF-8")
 steps <- c("02_data_prep.R",        # Data loading, exclusions, and construction of the 3 onset-period cohorts (G1, G2, G3)
            "03_imputation.R",       # Multiple imputation (MAR) and delta-adjusted pattern-mixture models (~2.5 h)
            "04_estimates.R",        # mRS distribution, survival, and independent survival at each time point; imputation model diagnostics
-           "05_prestroke.R",        # Estimates restricted to prestroke mRS 0–2 (Table S8)
+           "05_prestroke.R",        # Estimates restricted to prestroke mRS 0–2 (Table S4)
            "06_years_lived.R",      # Years alive and years independent over 15 years (primary outcome); expected years of life
            "07_model_checks.R",     # Supplemental Methods values: difference from delta = 0 regeneration, imputation model comparison (~1 h)
            "08_threshold_check.R",  # Supplemental Methods values: probability of threshold order reversal

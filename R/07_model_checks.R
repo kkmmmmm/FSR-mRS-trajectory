@@ -5,6 +5,8 @@
 #      run with δ_D = δ_M = 0, and the difference from the main-analysis MI (MAR) estimates is shown.
 #      Because the sensitivity analysis uses the main-analysis MI estimates as the δ = 0 reference, the difference between the two (fluctuation due to regeneration) is checked.
 #      The same random-number stream as the other scenarios (seed + 2000 H + b) is used, so results are directly comparable with the δ = ±0.5 etc. estimates.
+#      Scope of the comparison: survival and independent survival in all groups (all patients; discharge mRS 0–5, 0–2, 3–5; age group, sex, age group × sex),
+#      and years over 15 years in the 15-year cohort (years alive, years independent, years dependent; trapezoidal rule as in 06).
 #  (2) Comparison of imputation models: a single proportional odds model (mRS 0–6 with death as the highest mRS category) and
 #      the two-stage model (discrete-time hazard of death + proportional odds for mRS 0–5 in survivors) are cross-validated with the same predictors and the same 5 folds,
 #      comparing log loss for mRS 0–6, Brier score for death, calibration of death by preceding mRS, and
@@ -12,7 +14,7 @@
 #
 #  Assumptions: the 3 cohorts are built by the same procedure as 02_data_prep.R (intermediate files not saved), and mice is rerun with the same
 #        random seed as 03_imputation.R (the main-analysis imputed data are reproduced; agreement of estimates is checked in the output).
-#  Approximate run time: about 1 hour for the 3 cohorts. Output: output/90_diagnostics/TableD5
+#  Approximate run time: about 1 hour for the 3 cohorts (slightly more aggregation now that all groups are compared). Output: output/90_diagnostics/TableD5
 #-----------------------------------------------------------------------------------
 
 args <- commandArgs(trailingOnly = FALSE)
@@ -31,7 +33,18 @@ cohorts <- lapply(HORIZONS, function(H) make_cohort(d1, H))
 names(cohorts) <- sapply(cohorts, `[[`, "key")
 
 est_saved <- readRDS(file.path(WORK_DIR, "estimates_all.rds"))
-CHK_GROUPS <- c("All", "Discharge mRS 0-2", "Discharge mRS 3-5"); CHK_OUTCOMES <- c("Alive", "mRS 0-2")   # groups and outcomes to compare
+CHK_GROUPS <- names(GROUPS); CHK_OUTCOMES <- c("Alive", "mRS 0-2")   # groups (all groups) and outcomes to compare
+
+# Group means of years over 15 years (mean across imputed datasets; same trapezoidal rule as 06_years_lived.R): group × measure
+years_by_group <- function(Ylist, base, tp, groups = CHK_GROUPS) {
+  TT <- c(0, tp$year); dt <- diff(TT); w <- (c(dt, 0) + c(0, dt)) / 2
+  gr <- group_rows(base, groups)
+  one <- function(cut) vapply(Ylist, function(Y) as.vector((cbind(base$mrs_dc, Y) <= cut) %*% w), numeric(nrow(base)))
+  A <- rowMeans(one(5)); I <- rowMeans(one(2))
+  bind_rows(lapply(groups, function(g) { r <- gr[[g]]
+    data.frame(group = g, n = length(r), measure = c("alive", "indep", "dep"),
+               value = if (length(r)) c(mean(A[r]), mean(I[r]), mean(A[r] - I[r])) else NA_real_) }))
+}
 
 # ---- Functions for (2): cross-validation of the single proportional odds model (mRS 0–6) and the two-stage model ----------------
 p_all_twopart <- function(tp, Z, rows) {
@@ -109,10 +122,13 @@ for (k in run_keys) {
     select(group, time, time_lab, outcome, n, mar = est, mar_lcl = lcl, mar_ucl = ucl) %>%
     inner_join(est0 %>% select(group, time, outcome, regen0 = est, regen0_lcl = lcl, regen0_ucl = ucl), by = c("group", "time", "outcome")) %>%
     mutate(diff = regen0 - mar, cohort = coh$name, H = coh$H)
+  y0cmp <- if (coh$H == max(HORIZONS)) years_by_group(Ymar, base, coh$tp) %>% rename(mar = value) %>%
+    inner_join(years_by_group(Y0, base, coh$tp) %>% select(group, measure, regen0 = value), by = c("group", "measure")) %>%
+    mutate(diff = regen0 - mar, cohort = coh$name, H = coh$H) else NULL
 
   # (2) Comparison of imputation models
   mc <- model_compare(imp, coh)
-  out[[k]] <- list(delta0 = d0cmp, compare = lapply(mc, function(x) mutate(x, cohort = coh$name, H = coh$H)), reproduce_maxdiff = max(abs(chk$est - chk$est_saved)))
+  out[[k]] <- list(delta0 = d0cmp, delta0_years = y0cmp, compare = lapply(mc, function(x) mutate(x, cohort = coh$name, H = coh$H)), reproduce_maxdiff = max(abs(chk$est - chk$est_saved)))
   saveRDS(out, file.path(WORK_DIR, "model_checks.rds"))
   message(sprintf("  [%s] done (%.1f min)", coh$name, as.numeric(difftime(Sys.time(), t0, units = "mins"))))
 }
@@ -120,8 +136,13 @@ for (k in run_keys) {
 # ---- Output (aggregate values only) ----------------------------------------------------------------
 bind <- function(nm) bind_rows(lapply(out, function(x) x$compare[[nm]]))
 delta0 <- bind_rows(lapply(out, `[[`, "delta0"))
+delta0_years <- bind_rows(lapply(out, `[[`, "delta0_years"))
 sheets <- list(
   "delta0_regen_vs_MI" = delta0,
+  "delta0_regen_vs_MI_years" = delta0_years,
+  "delta0_regen_max_diff" = bind_rows(
+    delta0 %>% group_by(cohort, outcome) %>% summarise(max_abs_diff_pt = 100 * max(abs(diff)), .groups = "drop") %>% rename(measure = outcome),
+    delta0_years %>% group_by(cohort, measure) %>% summarise(max_abs_diff_years = max(abs(diff), na.rm = TRUE), .groups = "drop")),
   "Model comparison_by time" = bind("summary"),
   "Model comparison_by cohort" = bind("summary") %>% group_by(cohort, H) %>%
     summarise(logloss_single = weighted.mean(logloss_single, n), logloss_twopart = weighted.mean(logloss_twopart, n),
