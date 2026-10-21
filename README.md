@@ -50,7 +50,7 @@ reference/lifetable/
    Rscript R/run_all.R
    ```
 
-3. Aggregated results are written to `output/` (tables and figures numbered as in the manuscript in `output/00_paper_figures_tables/`). Individual-level intermediate files are written to `work/` and must not be shared. Output and work locations can be changed with `MRS_OUT_DIR` and `MRS_WORK_DIR`; a subset of steps can be run with, e.g., `MRS_STEPS="04,06,09"`.
+3. Aggregated results are written to `output/` (tables and figures numbered as in the manuscript in `output/00_paper_figures_tables/`, together with the unrounded values underlying each figure and table in `Source_data_for_figures_and_tables.xlsx` and per-item `*_data.csv` files). Individual-level intermediate files are written to `work/` and must not be shared. Output and work locations can be changed with `MRS_OUT_DIR` and `MRS_WORK_DIR`; a subset of steps can be run with, e.g., `MRS_STEPS="04,06,09"`.
 
 Random seeds are fixed (`SEED` in `00_config.R`), so rerunning the pipeline on the same data reproduces the reported estimates exactly.
 

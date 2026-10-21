@@ -1,5 +1,5 @@
 #-----------------------------------------------------------------------------------
-#  05_prestroke.R  —  Estimates restricted to patients independent before stroke (prestroke mRS 0–2) (Table S8A of the paper)
+#  05_prestroke.R  —  Estimates restricted to patients independent before stroke (prestroke mRS 0–2) (not included in the paper; kept for responses to reviewers)
 #
 #   Discharge mRS 3–5 mixes patients who newly needed assistance because of the stroke and those who needed assistance before onset.
 #   The same estimation as 04_estimates.R (MAR and δ = ±0.5, ±1.0) is performed in patients with prestroke mRS 0–2.

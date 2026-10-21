@@ -10,7 +10,7 @@
 #       Sex comparison = age (4 groups) distribution of all G1; application to the recent case mix = age (4 groups) × sex (8 strata) distribution of G3.
 #   - Sensitivity analyses: delta-adjusted pattern-mixture model (δ = −1.0, −0.5, +0.5, +1.0), complete-case analysis, years by step function.
 #   - Expected survival of the general population (Ederer I method; computed per patient from sex-, age-, and calendar-year-specific death probabilities of the abridged life tables, then averaged) and
-#     expected years alive obtained by integrating it over the same assessment time points (Figure S2 of the paper).
+#     expected years alive obtained by integrating it over the same assessment time points (Figure S3 of the paper).
 #   Output: work/estimates_years.rds, output/01_years_over_15y/
 #-----------------------------------------------------------------------------------
 
@@ -90,17 +90,17 @@ DC3 <- DC[1:3]
 in_dc <- function(x, g) x$mrs_dc %in% DC[[g]]
 bind_groups <- function(lst) bind_rows(lapply(names(lst), function(nm) cbind(key = nm, lst[[nm]])))
 
-# ---- 1. By discharge mRS (Table 2 and Figure 2 of the paper), step function, δ scenarios ---------------------------------------------
+# ---- 1. By discharge mRS (Table 2 and Figure 2 of the paper), step function (Supplemental Methods S5), δ scenarios (Table S7) ---------------------------------------------
 by_dc <- function(ym, groups = names(DC)) bind_rows(lapply(groups, function(g) cbind(group = g, pool_years(ym, which(in_dc(d, g))))))
 y_dc   <- by_dc(YM[["MAR"]])
 y_step <- by_dc(YM_step)
 y_scen <- bind_rows(lapply(names(SCEN), function(m) cbind(method = m, by_dc(YM[[m]]))))
 
-# ---- 2. By age group (4 groups) (Figure 4 and Table S6B of the paper) ------------------------------------------------------------
+# ---- 2. By age group (4 groups) (Figure 3 and Table S5 of the paper) ------------------------------------------------------------
 y_age <- bind_rows(lapply(names(DC), function(g) bind_rows(lapply(AGE_LABELS, function(a)
   cbind(group = g, age = a, pool_years(YM[["MAR"]], which(in_dc(d, g) & AGE == a)))))))
 
-# ---- 3. Sex: unadjusted, and values and male–female differences standardized to the age distribution of all G1 (Table S7 of the paper) ---------------------------------
+# ---- 3. Sex: unadjusted, and values and male–female differences standardized to the age distribution of all G1 (Table S6 of the paper) ---------------------------------
 w_age <- as.numeric(table(AGE)) / nrow(d)
 rows_age <- function(sel) lapply(AGE_LABELS, function(a) which(sel & AGE == a))
 y_sex <- bind_rows(lapply(names(DC3), function(g) {
@@ -116,7 +116,7 @@ y_sex <- bind_rows(lapply(names(DC3), function(g) {
 p_sex <- bind_rows(lapply(names(DC3), function(g) bind_rows(lapply(SEXL, function(s)
   cbind(group = g, sex = s, estimate_std(imps[["MAR"]], rows_age(in_dc(d, g) & SEX == s), w_age, coh$tp, times = H15)[, c("outcome", "est", "lcl", "ucl")])))))
 
-# ---- 4. Application to the recent (G3) case mix (right column of Table 2): 8 strata of age (4 groups) × sex, weighted within each group by the distribution of the same group in G3 ----
+# ---- 4. Application to the recent (G3) case mix (Table S9 of the paper): 8 strata of age (4 groups) × sex, weighted within each group by the distribution of the same group in G3 ----
 #   Range = minimum to maximum of the point estimates of the main analysis and each scenario δ = −1.0 to +1.0
 STRATA8 <- expand.grid(sex = c("men", "women"), age = AGE_LABELS, stringsAsFactors = FALSE)        # same order as the group names in est_all
 rows8 <- function(x, sel, ag, sx) lapply(seq_len(nrow(STRATA8)), function(i) which(sel & ag == STRATA8$age[i] & sx == ifelse(STRATA8$sex[i] == "men", "Men", "Women")))
@@ -144,13 +144,13 @@ sg16 <- c(sprintf("Discharge mRS 0-2, Age %s, %s", STRATA8$age, STRATA8$sex), sp
 recent <- rbind(recent, cbind(group = "All patients", strata = "Age × sex × discharge mRS 0-2/3-5 (16 strata)", rbind(recent_years(r16, w16), recent_prop(sg16, w16))))
 rownames(recent) <- NULL
 
-# ---- 5. By prestroke mRS (Table S8B of the paper) ---------------------------------------------------------------
+# ---- 5. By prestroke mRS (not included in the paper; kept for responses to reviewers) ---------------------------------------------------------------
 PRE <- ifelse(d$pre_mrs <= 2, "Prestroke mRS 0-2", "Prestroke mRS 3-5")
 y_pre <- bind_rows(lapply(unique(sort(PRE)), function(p) bind_rows(lapply(names(DC), function(g) {
   rows <- which(PRE == p & in_dc(d, g)); if (!length(rows)) return(NULL)
   cbind(prestroke = p, group = g, pool_years(YM[["MAR"]], rows)) }))))
 
-# ---- 6. Years in complete-case analysis (Table S9 of the paper): patients with mRS observed at all time points. 95% CI from the t distribution -------------------------
+# ---- 6. Years in complete-case analysis (Table S7 of the paper): patients with mRS observed at all time points. 95% CI from the t distribution -------------------------
 cc <- complete.cases(Yobs)
 ym_cc <- years_mat(list(Yobs[cc, , drop = FALSE]), d$mrs_dc[cc])
 y_cc <- bind_rows(lapply(names(DC), function(g) {
@@ -159,7 +159,7 @@ y_cc <- bind_rows(lapply(names(DC), function(g) {
   data.frame(group = g, n = n, t(setNames(unlist(r), paste(rep(VARS, each = 3), c("est", "lcl", "ucl"), sep = "_"))))
 }))
 
-# ---- 7. Expected years alive of the general population (Ederer I method; Figure S2 of the paper) ------------------------------------------------
+# ---- 7. Expected years alive of the general population (Ederer I method; Figure S3 of the paper) ------------------------------------------------
 #   Starting from the onset date, multiply (1 − qx) (qx = probability of dying within 1 year) for the calendar year and attained age of each follow-up year. The value at age 104 is used for ages 105 and over.
 #   At 3 and 6 months, the hazard within the year is assumed constant: (1 − qx)^f (f = fraction of the year).
 lt <- read.csv(LIFETABLE_PATH, fileEncoding = "UTF-8"); lt <- lt[lt$table_type == "abridged", c("year", "sex", "age", "qx")]
@@ -179,7 +179,7 @@ y_exp <- rbind(bind_rows(lapply(names(DC), function(g) exp_one(which(in_dc(d, g)
                bind_rows(lapply(AGE_LABELS, function(a) exp_one(which(AGE == a), paste("Age", a)))))
 y_exp <- merge(y_exp, transform(y_dc, alive_years = alive_est)[, c("group", "alive_years")], by = "group", all.x = TRUE, sort = FALSE)
 y_exp$difference <- y_exp$alive_years - y_exp$expected_years
-# Expected survival at each assessment time point (all patients, discharge mRS 0–2 and 3–5; dashed lines in Figure S2)
+# Expected survival at each assessment time point (all patients, discharge mRS 0–2 and 3–5; dashed lines in Figure S3)
 exp_curve <- bind_rows(lapply(names(DC3), function(g) data.frame(group = g, time = TT, expected = colMeans(Sexp[in_dc(d, g), , drop = FALSE]))))
 
 # ---- Check: years equal the area under the curves of survival / independent survival at each time point (averaged across imputations) ------------------------------

@@ -2,12 +2,16 @@
 #  09_paper_items.R  —  Create the manuscript (main text and Supplemental Material) figures and tables,
 #                       under their manuscript numbers, in output/00_paper_figures_tables/
 #
-#   Main text: Table 1 (G1 baseline characteristics; all patients and discharge mRS 0–2 / 3–5), Table 2 (years over 15 years
-#              and 15-year outcomes by discharge mRS), Figure 1 (mRS distribution at each assessment), Figure 2 (how the
-#              15 years were spent by discharge mRS), Figure 3 (survival and independent survival over time),
-#              Figure 4 (how the 15 years were spent by age group)
-#   Supplemental Material: Tables S2–S6, Figures S1–S4 (Table S1, the list of imputation-model predictors, is written directly in the Supplemental Material)
-#   Zenodo: Tables Z1–Z5 (moved from the Supplement on 2026-10-15)
+#   Numbering of the 2026-10-20 co-author revision of the manuscript:
+#   Main text: Table 1 (G1 baseline characteristics), Table 2 (years over 15 years by discharge mRS),
+#              Figure 1 (survival and independent survival over time), Figure 2 (how the 15 years were spent by discharge mRS),
+#              Figure 3 (how the 15 years were spent by age group)
+#   Supplemental Material: Tables S2–S9, Figures S1–S5 (Table S1, the list of imputation-model predictors, is written directly in the Supplemental Material)
+#     Table S4 = mRS distribution and survival / independent survival (all time points), Table S5 = years by age group, Table S6 = by sex,
+#     Table S7 = by missing-data handling, Table S8 = characteristics of the 3 cohorts, Table S9 = standardization to the G3 age-sex composition.
+#     Figure S2 = mRS distribution, Figure S3 = comparison with the general population (tables of relative survival and years alive below),
+#     Figure S4 = discharge mRS × age group, Figure S5 = comparison of the 3 cohorts
+#   Zenodo: Tables Z1–Z5 (moved from the Supplement on 2026-10-15; in the 2026-10-20 revision the contents of Z1–Z4 returned to the Supplement as Tables S4–S7)
 #   - The object names below (s4 to s11) and the keys in paper_values.json ("Table S4", etc.) keep the numbers used before the move.
 #     The correspondence with the manuscript numbers is given by PAPER_NO.
 #   - Estimates come from 04_estimates.R (work/estimates_all.rds), 05_prestroke.R (estimates_prestroke02.rds), and 06_years_lived.R (estimates_years.rds).
@@ -34,6 +38,7 @@ G3S <- c("All", "Discharge mRS 0-2", "Discharge mRS 3-5"); G6 <- paste0("Dischar
 glab <- function(g) ifelse(g %in% c("All", "All patients"), "All patients", sub("Discharge mRS ", "", sub("-", "–", g)))   # "Discharge mRS" column of the tables
 big <- function(x) format(x, big.mark = ",", trim = TRUE)
 f1 <- function(x) formatC(x, format = "f", digits = 1)
+write_csv_bom <- function(x, f) { con <- file(f, "w", encoding = "UTF-8"); on.exit(close(con)); writeLines("\ufeff", con, sep = ""); write.csv(x, con, row.names = FALSE) }   # UTF-8 CSV with BOM (opens in Excel without garbled characters)
 yci <- function(e, l, u) sprintf("%s (%s–%s)", f1(e), f1(pmax(l, 0)), f1(u))                    # Years (95% CI; lower limit truncated at 0)
 pick <- function(m, g, o, t, E = est_all, H = H15) E[E$method == m & E$H == H & E$group == g & E$outcome == o & E$time == t, ]
 cell <- function(x) if (nrow(x)) fmt_ci(x$est, x$lcl, x$ucl) else "–"
@@ -209,13 +214,49 @@ s11 <- cdiff %>% mutate(Outcome = OUTL[outcome], `Discharge mRS` = glab(group), 
 minus <- function(x) gsub("-", "−", x, fixed = TRUE)
 s11[, -(1:2)] <- lapply(s11[, -(1:2)], minus); s7[] <- lapply(s7, function(x) ifelse(grepl("^[+-]", x), minus(x), x))
 
+# ---- Tables of the 2026-10-20 revision (manuscript numbers; column and row order follow the co-author revision docx) ---------------------------------
+G3Y <- c("All patients", "Discharge mRS 0-2", "Discharge mRS 3-5")
+# Table 2: years over 15 years by discharge mRS (95% CI)
+n2 <- t2[, c("Discharge mRS", "n", "Years alive", "Years alive and independent", "Years alive and dependent")]
+names(n2) <- c("Discharge mRS", "n", "Survival time", "Time lived independently", "Time lived requiring assistance")
+n2$`Discharge mRS`[1] <- "All"
+# Table S4: mRS 0–6 distribution at each assessment (mean across imputations), and survival / independent survival (pooled on the logit scale; 95% CI)
+pc <- function(g, o, t) if (t == 0) "" else cell(pick("MAR", g, o, t))
+nS4 <- do.call(rbind, lapply(c("All", G6), function(g) { x <- e15 %>% filter(group == g, outcome %in% paste0("mRS ", 0:6))
+  tt <- sort(unique(x$time))
+  rows <- do.call(rbind, lapply(tt, function(t) { v <- sapply(paste0("mRS ", 0:6), function(o) fmt_pct(x$est[x$time == t & x$outcome == o]))
+    data.frame(Assessment = time_lab_en(x$time_lab[x$time == t][1]), t(v), `Survival probability` = pc(g, "Alive", t), `Proportion alive and independent` = pc(g, "mRS 0-2", t), check.names = FALSE) }))
+  hd <- rows[1, ]; hd[] <- ""; hd$Assessment <- sprintf("%s (n = %s)", ifelse(g == "All", "All patients", g), big(x$n[1]))   # group header row
+  rbind(hd, rows) }))
+# Table S5: years over 15 years by discharge mRS (all patients, 0–2, 3–5, 0 to 5) × 4 age groups
+nS5 <- s6b; names(nS5) <- c("Discharge mRS", "Age group", "n", "Survival time, years", "Time lived independently, years", "Time lived requiring assistance, years")
+# Table S6: by sex (unadjusted, and standardized to the overall G1 age distribution)
+nS6 <- s7[, c("Discharge mRS", "Sex", "n", "Years alive (unadjusted)", "Years independent (unadjusted)", "Years alive (age-standardized)",
+              "Years independent (age-standardized)", "Years dependent (age-standardized)", "Independent at 15 y, % (age-standardized)")]
+names(nS6) <- c("Discharge mRS", "Sex", "n", "Unadjusted: survival time, years", "Unadjusted: time lived independently, years", "Age-standardized: survival time, years",
+                "Age-standardized: time lived independently, years", "Age-standardized: time lived requiring assistance, years", "Age-standardized: proportion alive and independent at 15 years, %")
+nS6$Sex[nS6$Sex == "Difference (men − women)"] <- "Difference"
+# Table S7: by missing-data handling (point estimates of the δ-adjusted pattern-mixture model, complete-case analysis, KM estimation)
+nS7 <- do.call(rbind, lapply(list(c("Survival probability, %", "Alive"), c("Proportion alive and independent, %", "mRS 0-2"), c("Survival time, years", "alive"), c("Time lived independently, years", "indep")), function(m)
+  do.call(rbind, lapply(G3S, function(g) { yc <- ycc[ycc$group == ykey(g), ]; prop <- m[2] %in% c("Alive", "mRS 0-2")
+    data.frame(Measure = m[1], Group = ifelse(g == "All", "All patients", sub("-", "–", g)), n = big(pick("MAR", g, "Alive", 1)$n), t(setNames(sapply(DELTA_M, function(dm)
+      if (prop) fmt_pct(pick(dm, g, m[2], H15)$est) else f1(ysc[ysc$method == dm & ysc$group == ykey(g), paste0(m[2], "_est")])), sprintf("δ = %s", sub("-", "−", sprintf("%+.1f", DELTAS_MNAR))))),
+      `Complete-case analysis` = if (prop) cell(pick("CC", g, m[2], H15)) else yci(yc[[paste0(m[2], "_est")]], yc[[paste0(m[2], "_lcl")]], yc[[paste0(m[2], "_ucl")]]),
+      `KM estimation` = if (m[2] == "Alive") cell(pick("KM_obs", g, "Alive", H15)) else "–", check.names = FALSE) }))))
+# Table S8: characteristics of the 3 cohorts (same as former Table S10)
+nS8 <- s10
+# Table S9: G1 standardized to the G3 age-sex composition (8 strata): 15-year proportions and years over 15 years (point estimate [range including δ = −1 to +1])
+nS9 <- do.call(rbind, lapply(list(c("Survival probabilities", "p15_alive", "alive"), c("Proportions alive and independent", "p15_indep", "indep")), function(m)
+  data.frame(Outcome = m[1], Group = c("All patients", "Discharge mRS 0–2", "Discharge mRS 3–5"), n = big(sapply(G3S, function(g) pick("MAR", g, "Alive", 1)$n)),
+             `Proportion at 15 years [range], %` = sapply(G3S, function(g) rec_cell(g, m[2])), `Time over 15 years [range], years` = sapply(G3S, function(g) rec_cell(g, m[3])), check.names = FALSE)))
+
 # =================================================================================================
 #  Figures
 # =================================================================================================
 fig <- function(name) file.path(pd, paste0(name, ".png"))
 
-# ---- Figure 1: mRS distribution at each assessment in G1 (all patients top center; discharge mRS 0–5 in 2 columns × 3 rows) -------------------------
-# Values are not printed inside bars (category values are in Table Z1)
+# ---- Figure S2 (former Figure 1): mRS distribution at each assessment in G1 (all patients top center; discharge mRS 0–5 in 2 columns × 3 rows)
+# Values are not printed inside bars (category values are in Table S4)
 one_panel <- function(g, show_legend = FALSE) { p <- plot_trajectory(e15, grp = g, ncol = 1, values = FALSE) + labs(x = NULL, y = NULL)
   if (!show_legend) p <- p + theme(legend.position = "none"); p }
 top <- patchwork::plot_spacer() + one_panel("All", TRUE) + patchwork::plot_spacer() + patchwork::plot_layout(widths = c(0.5, 1, 0.5))
@@ -224,9 +265,9 @@ p1 <- patchwork::wrap_elements(full = top) / pairs[[1]] / pairs[[2]] / pairs[[3]
 ylab <- grid::textGrob("Patients (%)", rot = 90, gp = grid::gpar(fontsize = 8, fontfamily = FIG_FONT))
 p1 <- patchwork::wrap_elements(full = ylab) + patchwork::wrap_elements(full = p1) + patchwork::plot_layout(widths = c(0.03, 1))
 cap <- grid::textGrob("Time after stroke onset (years unless indicated)", gp = grid::gpar(fontsize = 8, fontfamily = FIG_FONT))
-save_fig(p1 / patchwork::wrap_elements(full = cap) + patchwork::plot_layout(heights = c(1, 0.025)), fig("Figure1_mRS_distribution_by_discharge_mRS"), FIG_W, 8.6)
+save_fig(p1 / patchwork::wrap_elements(full = cap) + patchwork::plot_layout(heights = c(1, 0.025)), fig("FigureS2_mRS_distribution_by_discharge_mRS"), FIG_W, 8.6)
 
-# ---- Figures 2 and 4: how the 15 years were spent (horizontal bars of years alive and independent, alive and dependent, and after death) -------------------------------
+# ---- Figures 2 and 3 (former Figure 4): how the 15 years were spent (horizontal bars of years alive and independent, alive and dependent, and after death) -------------------------------
 YCOL <- c("Lived independently (mRS 0–2)" = "#1f4e79", "Lived requiring assistance (mRS 3–5)" = "#e8833a", "After death" = "#d9d9d9")
 years_bars <- function(y, labels, tag = NULL, show_x = TRUE) {
   y$lab <- factor(labels, levels = rev(labels))
@@ -246,9 +287,9 @@ save_fig(years_bars(yd, sprintf("%s (n = %s)", c("All patients", G6), big(yd$n))
 ya <- function(g) { y <- yrs$by_age[yrs$by_age$group == g, ]; years_bars(y, sprintf("%s (n = %s)", AGE_EN[y$age], big(y$n)), tag = NULL, show_x = g == "Discharge mRS 3-5") }
 ttl <- function(p, t) p + labs(tag = t)
 p4 <- (ttl(ya("All patients"), "A") / ttl(ya("Discharge mRS 0-2"), "B") / ttl(ya("Discharge mRS 3-5"), "C")) + patchwork::plot_layout(guides = "collect") & theme(legend.position = "top")
-save_fig(p4, fig("Figure4_years_by_age_group"), FIG_W, 5.6)
+save_fig(p4, fig("Figure3_years_by_age_group"), FIG_W, 5.6)
 
-# ---- Figure 3: survival (A) and independent survival (B) over time for each discharge mRS group 0–5 ---------------------------------------
+# ---- Figure 1 (former Figure 3): survival (A) and independent survival (B) over time for each discharge mRS group 0–5
 DM_COLS <- setNames(unname(MRS_COLS[as.character(0:5)]), G6); DM_SHAPES <- setNames(c(16, 15, 17, 25, 18, 3), G6)
 d3f <- e15 %>% filter(group %in% G6, outcome %in% c("Alive", "mRS 0-2")) %>% group_by(group) %>% mutate(lab = sprintf("%s (n = %s)", group, big(n[1]))) %>% ungroup()
 lv <- (d3f %>% distinct(group, lab))$lab[match(G6, (d3f %>% distinct(group, lab))$group)]; d3f$lab <- factor(d3f$lab, levels = lv)
@@ -260,12 +301,12 @@ panel2 <- function(o, yl, tag, sx) ggplot(d3f %>% filter(outcome == o), aes(time
   labs(x = if (sx) "Years after stroke onset" else NULL, y = yl, tag = tag) + guides(colour = guide_legend(nrow = 2, byrow = FALSE)) +
   theme_mrs() + theme(panel.grid.major.y = element_line(colour = GRID, linewidth = 0.3))
 save_fig((panel2("Alive", "Alive (%)", "A", FALSE) / panel2("mRS 0-2", "Alive with mRS 0–2 (%)", "B", TRUE)) + patchwork::plot_layout(guides = "collect") & theme(legend.position = "top"),
-         fig("Figure3_survival_and_independent_survival_by_discharge_mRS"), FIG_W, 6.6)
+         fig("Figure1_survival_and_independent_survival_by_discharge_mRS"), FIG_W, 6.6)
 
 # ---- Figure S1: selection of analyzed patients and composition of the 3 cohorts (flowchart) -------------------------------------------
 save_fig(plot_flow(co), fig("FigureS1_flowchart"), FIG_W, 4.6)
 
-# ---- Figure S2: survival in G1 vs expected survival in the general population (left = all patients, right = discharge mRS 0–2 / 3–5; relative survival below) ----------
+# ---- Figure S3 (former Figure S2): survival in G1 vs expected survival in the general population (left = all patients, right = discharge mRS 0–2 / 3–5; relative survival and mean years alive below)
 #   Survival = multiple imputation (MAR) estimates with 95% CI; expected survival = 06_years_lived.R (Ederer I method). Plotted values are rounded to 1 decimal place in %
 GL <- c("All" = "All patients", "Discharge mRS 0-2" = "Discharge mRS 0–2", "Discharge mRS 3-5" = "Discharge mRS 3–5")
 nG <- sapply(G3S, function(g) big(pick("MAR", g, "Alive", 1)$n))
@@ -274,7 +315,8 @@ lt <- e15 %>% filter(group %in% G3S, outcome == "Alive") %>% select(group, time,
   mutate(across(c(est, lcl, ucl), ~ ifelse(time == 0, 1, .x))) %>%                    # All patients alive at discharge
   inner_join(yrs$expected_curve %>% mutate(group = ifelse(group == "All patients", "All", group)), by = c("group", "time")) %>%
   arrange(match(group, G3S), time) %>%
-  mutate(rel = round(100 * est / expected, 1), obs = round(100 * est, 1) / 100, exp = round(100 * expected, 1) / 100, lcl = r1(lcl), ucl = r1(ucl),
+  mutate(lcl_raw = lcl, ucl_raw = ucl, rel_raw = 100 * est / expected,   # unrounded values for the co-author workbook
+         rel = round(100 * est / expected, 1), obs = round(100 * est, 1) / 100, exp = round(100 * expected, 1) / 100, lcl = r1(lcl), ucl = r1(ucl),
          glab = factor(GL[group], levels = GL),
          panel = ifelse(group == "All", sprintf("All patients (n = %s)", nG[1]), sprintf("Discharge mRS 0–2 (n = %s) and 3–5 (n = %s)", nG[2], nG[3])))
 GC <- setNames(c("#2b2b2a", "#2a78d6", "#eb6834"), GL)
@@ -289,15 +331,22 @@ sp <- function(x) ggplot(x, aes(time, colour = glab, fill = glab)) +
   labs(x = "Years after stroke onset", y = "Survival (%)") + theme_mrs() + theme(panel.grid.major.y = element_line(colour = GRID, linewidth = 0.3))
 rs <- lt %>% filter(time %in% c(5, 10, 15)) %>% transmute(glab, time, lab = sprintf("%.1f%%", rel))
 tb <- ggplot(rs, aes(factor(time), glab, label = lab)) + geom_text(size = 2.6, family = FIG_FONT) +
-  scale_x_discrete(labels = function(x) paste(x, "y")) + scale_y_discrete(limits = rev(levels(rs$glab))) + labs(x = NULL, y = NULL, title = "Relative survival (observed / expected)") +
-  theme_mrs() + theme(axis.line = element_blank(), axis.ticks = element_blank(), plot.title = element_text(size = 8, face = "bold", family = FIG_FONT))
+  scale_x_discrete(labels = function(x) paste(x, "y"), position = "top") + scale_y_discrete(limits = rev(levels(rs$glab))) + labs(x = NULL, y = NULL, title = "Relative survival (observed / expected)") +  # column labels (5 y, etc.) above the table
+  theme_mrs() + theme(axis.line = element_blank(), axis.ticks = element_blank(), plot.title = element_text(size = 8, face = "bold", family = FIG_FONT, margin = margin(b = 8)))  # space between the title and the column labels
+# Mean years alive over 15 years: observed (multiple imputation), general-population expectation (co-author comment 2026-10-20: show as a table below the figure)
+exs <- yrs$expected %>% filter(group %in% c("All patients", "Discharge mRS 0-2", "Discharge mRS 3-5")) %>% mutate(glab = factor(GL[ifelse(group == "All patients", "All", group)], levels = GL))
+ys2 <- rbind(data.frame(glab = exs$glab, col = "This study", lab = f1(exs$alive_years)), data.frame(glab = exs$glab, col = "General population", lab = f1(exs$expected_years))) %>%  # column names use the same words as the figure legend (no Difference column: the differences in the text can be computed from the rounded values)
+  mutate(col = factor(col, levels = c("This study", "General population")))
+tb2 <- ggplot(ys2, aes(col, glab, label = lab)) + geom_text(size = 2.6, family = FIG_FONT) + scale_y_discrete(limits = rev(levels(ys2$glab))) + scale_x_discrete(position = "top") +  # column labels above the table
+  labs(x = NULL, y = NULL, title = "Mean survival time over 15 years (years)") +
+  theme_mrs() + theme(axis.line = element_blank(), axis.ticks = element_blank(), axis.text.y = element_blank(), plot.title = element_text(size = 8, face = "bold", family = FIG_FONT, margin = margin(b = 8)))  # space between the title and the column labels
 pS2 <- (((sp(lt %>% filter(group == "All")) + guides(colour = "none")) | (sp(lt %>% filter(group != "All")) + labs(y = NULL))) + patchwork::plot_layout(guides = "collect") &
           guides(linetype = guide_legend(nrow = 1, order = 1)) & theme(legend.position = "top", legend.box = "vertical", legend.box.just = "left")) /
-  (patchwork::plot_spacer() | tb | patchwork::plot_spacer()) + patchwork::plot_layout(heights = c(1, 0.28))
-pS2[[2]] <- pS2[[2]] + patchwork::plot_layout(widths = c(0.25, 1, 0.25))
-save_fig(pS2, fig("FigureS2_survival_vs_general_population"), FIG_W, 4.6)
+  patchwork::wrap_elements(full = (tb | patchwork::plot_spacer() | tb2) + patchwork::plot_layout(widths = c(1, 0.08, 0.55))) +   # rows of the tables are not aligned with the axes of the figure above
+  patchwork::plot_layout(heights = c(1, 0.4))
+save_fig(pS2, fig("FigureS3_survival_vs_general_population"), FIG_W, 5.0)
 
-# ---- Figure S3: survival and independent survival over time by discharge mRS 0–5 × 4 age groups --------------------------------------------
+# ---- Figure S4 (former Figure S3): survival and independent survival over time by discharge mRS 0–5 × 4 age groups
 OUT2 <- c("Alive" = "Alive (%)", "mRS 0-2" = "Alive with mRS 0–2 (%)")
 dS3 <- est_sa %>% filter(startsWith(group, "AGE4 | ")) %>% tidyr::separate(group, c("type", "dc", "lev"), sep = " \\| ") %>% filter(dc %in% G6) %>%
   mutate(dc = factor(dc, levels = G6), lev = factor(lev, levels = AGE_LABELS, labels = c("<65 years", "65–74 years", "75–84 years", "≥85 years")), outcome = factor(OUT2[outcome], levels = OUT2))
@@ -306,16 +355,79 @@ pS3 <- ggplot(dS3, aes(time, est, colour = lev)) + geom_line(linewidth = 0.55) +
   scale_x_continuous(breaks = seq(0, 15, 3), expand = expansion(mult = c(0.01, 0.02))) +
   scale_y_continuous(labels = function(x) 100 * x, limits = c(0, 1), breaks = seq(0, 1, 0.25), expand = c(0, 0.02)) + labs(x = "Years after stroke onset", y = NULL) +
   theme_mrs() + theme(strip.placement = "outside", strip.text.y.left = element_text(angle = 90, hjust = 0.5), panel.grid.major.y = element_line(colour = GRID, linewidth = 0.3))
-save_fig(pS3, fig("FigureS3_by_discharge_mRS_and_age_group"), FIG_W, 8.8)
+save_fig(pS3, fig("FigureS4_by_discharge_mRS_and_age_group"), FIG_W, 8.8)
 
-# ---- Figure S4: survival (A) and independent survival (B) by discharge mRS 0–5 in the 3 cohorts (line type = cohort) ------------------------------
+# ---- Figure S5 (former Figure S4): survival (A) and independent survival (B) by discharge mRS 0–5 in the 3 cohorts (line type = cohort)
 el <- est_all %>% filter(method == "MAR", group %in% G6, outcome %in% c("Alive", "mRS 0-2")) %>% mutate(G = factor(G_OF[as.character(H)], levels = c("G1", "G2", "G3")))
 pan <- function(o, yl, tag, sx) ggplot(el %>% filter(outcome == o), aes(time, est, colour = group, linetype = G)) + geom_line(linewidth = 0.5) +
   scale_colour_manual(values = DM_COLS, name = NULL) + scale_linetype_manual(values = c(G1 = "solid", G2 = "22", G3 = "12"), name = NULL) + scale_x_continuous(breaks = seq(0, 15, 3)) +
   scale_y_continuous(labels = function(x) 100 * x, limits = c(0, 1), breaks = seq(0, 1, 0.2), expand = c(0, 0.02)) +
   labs(x = if (sx) "Years after stroke onset" else NULL, y = yl, tag = tag) + guides(colour = guide_legend(nrow = 2)) + theme_mrs() + theme(panel.grid.major.y = element_line(colour = GRID, linewidth = 0.3))
 save_fig((pan("Alive", "Alive (%)", "A", FALSE) / pan("mRS 0-2", "Alive with mRS 0–2 (%)", "B", TRUE)) + patchwork::plot_layout(guides = "collect") & theme(legend.position = "top"),
-         fig("FigureS4_three_cohorts_by_discharge_mRS"), FIG_W, 6.8)
+         fig("FigureS5_three_cohorts_by_discharge_mRS"), FIG_W, 6.8)
+
+# =================================================================================================
+#  Source data for the figures (co-author request 2026-10-20: export the plotted data of every figure so the figures can be redrawn freely)
+#   Same name as each figure + _data.csv (UTF-8 with BOM). Under "Save" below, these are combined with the tables into "Source_data_for_figures_and_tables.xlsx"
+#   Proportions are % (unrounded; 95% CIs pooled as in the figures and tables); years are mean years during the 15 years after onset. No individual-level data (aggregates only)
+# =================================================================================================
+fig_src <- tryCatch({
+  pc3 <- function(x) 100 * x; yr3 <- function(x) x   # not rounded (rounding to 3 decimals can shift values at the x.x5 boundary by 0.1 relative to the manuscript)
+  OUTN <- c("Alive" = "Survival probability", "mRS 0-2" = "Proportion alive and independent")
+  props <- function(x) data.frame(time_years = x$time, assessment = time_lab_en(x$time_lab), outcome = unname(OUTN[x$outcome]), n = x$n,
+                                  estimate_pct = pc3(x$est), lcl_pct = pc3(x$lcl), ucl_pct = pc3(x$ucl))
+  ytab_src <- function(y) data.frame(n = y$n,
+    survival_time = yr3(y$alive_est), survival_time_lcl = yr3(y$alive_lcl), survival_time_ucl = yr3(y$alive_ucl),
+    time_independent = yr3(y$indep_est), time_independent_lcl = yr3(y$indep_lcl), time_independent_ucl = yr3(y$indep_ucl),
+    time_requiring_assistance = yr3(y$dep_est), time_requiring_assistance_lcl = yr3(y$dep_lcl), time_requiring_assistance_ucl = yr3(y$dep_ucl),
+    time_after_death = yr3(H15 - y$alive_est))
+  flv <- function(lab) { v <- co$flow$n[co$flow$item == lab]; if (length(v)) v[1] else NA }
+  flow_src <- rbind(
+    data.frame(box = c("Patients with ischemic stroke", "Excluded: in-hospital death (discharge mRS 6)", "Excluded: missing discharge mRS", "Discharged alive (study population)"),
+               cohort = "", onset_from = format(min(do.call(c, co$onset_range)), "%Y-%m"), onset_to = format(max(do.call(c, co$onset_range)), "%Y-%m"),   # onset date to year-month only (as in the figure)
+               n = c(flv("Registered patients (ischemic stroke)"), flv("Excluded: in-hospital death (discharge mRS = 6)"), flv("Excluded: missing discharge mRS"), flv("Analyzed patients")), pct_of_cohort = NA),
+    do.call(rbind, lapply(chs, function(x) { n <- nrow(x$data); ncc <- sum(complete.cases(x$data[, x$tp$col])); r <- range(x$data$onset)
+      data.frame(box = c("Cohort", "Complete mRS follow-up", "Lost to follow-up (>=1 missing mRS)"), cohort = sprintf("%s (%d-year cohort)", G_OF[[as.character(x$H)]], x$H),
+                 onset_from = format(r[1], "%Y-%m"), onset_to = format(r[2], "%Y-%m"), n = c(n, ncc, n - ncc), pct_of_cohort = round(c(100, 100 * ncc / n, 100 * (n - ncc) / n), 1)) })))
+  f1d <- e15 %>% filter(group %in% G6, outcome %in% names(OUTN)) %>% arrange(match(group, G6), outcome, time)
+  s2d <- e15 %>% filter(group %in% c("All", G6), outcome %in% paste0("mRS ", 0:6)) %>% arrange(match(group, c("All", G6)), time, outcome)
+  s4d <- est_sa %>% filter(startsWith(group, "AGE4 | ")) %>% tidyr::separate(group, c("type", "dc", "age"), sep = " \\| ") %>% filter(dc %in% G6) %>%
+    arrange(match(dc, G6), match(age, AGE_LABELS), outcome, time)
+  s5d <- el %>% arrange(G, match(group, G6), outcome, time)
+  ya3 <- yrs$by_age %>% filter(group %in% c("All patients", "Discharge mRS 0-2", "Discharge mRS 3-5"))
+  S <- list(
+    "Figure 1" = cbind(discharge_mRS = sub("Discharge mRS ", "", f1d$group), props(f1d)),
+    "Figure 2" = cbind(group = c("All patients", paste("Discharge mRS", 0:5)), ytab_src(yd)),
+    "Figure 3" = cbind(panel = c("All patients" = "A", "Discharge mRS 0-2" = "B", "Discharge mRS 3-5" = "C")[ya3$group], group = sub("-", "–", ya3$group), age_group = unname(AGE_EN[ya3$age]), ytab_src(ya3)),
+    "Figure S1" = flow_src,
+    "Figure S2" = data.frame(group = ifelse(s2d$group == "All", "All patients", s2d$group), n = s2d$n, time_years = s2d$time, assessment = time_lab_en(s2d$time_lab),
+                             mRS = sub("mRS ", "", s2d$outcome), percent = pc3(s2d$est)),
+    "Figure S3" = data.frame(group = as.character(lt$glab), time_years = lt$time, survival_pct = 100 * lt$est, survival_lcl_pct = 100 * lt$lcl_raw,  # not rounded
+                             survival_ucl_pct = 100 * lt$ucl_raw, expected_survival_pct = 100 * lt$expected, relative_survival_pct = lt$rel_raw),  # not rounded
+    "Figure S3 (table)" = data.frame(group = as.character(exs$glab), mean_survival_time_this_study = yr3(exs$alive_years), mean_survival_time_general_population = yr3(exs$expected_years)),
+    "Figure S4" = cbind(discharge_mRS = sub("Discharge mRS ", "", s4d$dc), age_group = unname(AGE_EN[s4d$age]), props(s4d)),
+    "Figure S5" = cbind(cohort = as.character(s5d$G), discharge_mRS = sub("Discharge mRS ", "", s5d$group), props(s5d)))
+  readme <- data.frame(Sheet = c(names(S), "(All figure sheets)"),
+    Contents = c("Figure 1: survival (A) and proportion alive and independent (mRS 0–2; B) at each assessment by discharge mRS in G1. The figure connects estimate_pct with lines.",
+                 "Figure 2: mean years during the 15 years after onset by discharge mRS in G1 (time lived independently, time lived requiring assistance, time after death = 15 − survival time). The number to the right of each bar is the survival time.",
+                 "Figure 3: the same values as Figure 2 by age group at onset (A: all patients, B: discharge mRS 0–2, C: discharge mRS 3–5). Values for each discharge mRS are in Table S5.",
+                 "Figure S1: number of patients in each box of the flowchart (onset year-month = first and last in that box).",
+                 "Figure S2: distribution of mRS 0–6 (6 = death) at each assessment by discharge mRS in G1 (mean of 100 imputed datasets; each time point sums to 100%).",
+                 "Figure S3: survival in G1 (multiple imputation, 95% CI), expected survival of the general population matched for sex, age, and calendar year (Ederer I method), and relative survival = survival / expected survival. The figure draws these values as step functions.",
+                 "Table below Figure S3: mean survival time over 15 years (estimate of this study and value of the general population matched for sex, age, and calendar year; years).",
+                 "Figure S4: survival and proportion alive and independent by discharge mRS (rows) × age group at onset (colors) in G1.",
+                 "Figure S5: survival (A) and proportion alive and independent (B) by discharge mRS in G1 (up to 15 years), G2 (up to 10 years), and G3 (up to 5 years).",
+                 "Proportions are in % and years in years, all unrounded (values in the manuscript and figures are these values rounded; 95% CIs pooled on the logit scale with Rubin's rules). time_years = 0 is discharge. Aggregates only; no individual-level data. The CSV of each figure has the same name as the figure image + _data.csv."))
+  fig_sheets <- S; fig_readme <- readme   # figure data (combined with the tables into one workbook under "Save" below)
+  # Each CSV has the same name as the figure image + _data (e.g., Figure1_…png ↔ Figure1_…_data.csv) in the same folder, so the correspondence is clear from the number
+  FIG_FILE <- c("Figure 1" = "Figure1_survival_and_independent_survival_by_discharge_mRS", "Figure 2" = "Figure2_years_by_discharge_mRS",
+                "Figure 3" = "Figure3_years_by_age_group", "Figure S1" = "FigureS1_flowchart", "Figure S2" = "FigureS2_mRS_distribution_by_discharge_mRS",
+                "Figure S3" = "FigureS3_survival_vs_general_population", "Figure S3 (table)" = "FigureS3_survival_vs_general_population_table",
+                "Figure S4" = "FigureS4_by_discharge_mRS_and_age_group", "Figure S5" = "FigureS5_three_cohorts_by_discharge_mRS")
+  stopifnot(all(names(S) %in% names(FIG_FILE)))
+  for (nm in names(S)) write_csv_bom(S[[nm]], file.path(pd, paste0(FIG_FILE[[nm]], "_data.csv")))
+  TRUE
+}, error = function(e) { warning("Failed to write the source data for the figures: ", conditionMessage(e)); FALSE })
 
 # =================================================================================================
 #  Values cited in the text (including some not shown directly in tables or figures)
@@ -396,41 +508,97 @@ for (v in names(miss3)) V[[paste0("miss3_", v)]] <- miss3[[v]]
 V$step_all_alive <- f1(stp$alive_est[1]); V$step_all_indep <- f1(stp$indep_est[1]); V$step_all_dep <- f1(stp$dep_est[1])
 V$recent16_indep_est <- f1(r16$est[r16$value == "indep"]); V$recent16_p15_indep_est <- f1(r16$est[r16$value == "p15_indep"])
 V$n_cc_all <- big(n_cc[[1]]); V$n_cc_dc02 <- big(n_cc[[2]]); V$n_cc_dc35 <- big(n_cc[[3]])
+sv_all <- sapply(5:15, function(t) 100 * e("All", "mRS 0-2", t) / e("All", "Alive", t)); V$surv_indep_range_5to15 <- sprintf("%.1f–%.1f", min(sv_all), max(sv_all))   # proportion independent among survivors (every year from 5 to 15 y)
+V$i_all_5_ci <- cell(pick("MAR", "All", "mRS 0-2", 5))
 txt_tab <- data.frame(Key = names(V), Value = unlist(lapply(V, as.character)), row.names = NULL, check.names = FALSE)
+# ---- For the co-authors' check: values in the manuscript text that are not shown directly in a table (or are computed from a table), with their sources
+txt_check <- tryCatch({
+  p1 <- function(x) sprintf("%.1f", x); p0 <- function(x) sprintf("%.0f", x)
+  E <- function(m, g, o, t) pick(m, g, o, t)$est * 100
+  died <- sapply(0:2, function(k) 100 - E("MAR", paste("Discharge mRS", k), "Alive", 15))
+  assist <- sapply(0:2, function(k) E("MAR", paste("Discharge mRS", k), "Alive", 15) - E("MAR", paste("Discharge mRS", k), "mRS 0-2", 15))
+  d1i <- E("MNAR_delta+1.0", "All", "mRS 0-2", 15); m0i <- E("MAR", "All", "mRS 0-2", 15)
+  y1 <- ysc$indep_est[ysc$method == "MNAR_delta+1.0" & ysc$group == "All patients"]; y0 <- ysc$indep_est[ysc$method == "MAR" & ysc$group == "All patients"]
+  d5 <- openxlsx::read.xlsx(file.path(OUT_DIR, "90_diagnostics", "TableD5_delta0_regeneration_and_model_comparison.xlsx"), "delta0_regen_vs_MI")
+  d5m <- 100 * max(abs(d5$diff[d5$group %in% c("All", "Discharge mRS 0-2", "Discharge mRS 3-5") & d5$outcome %in% c("Alive", "mRS 0-2")]))
+  ex <- function(g, v) ex_[ex_$group == g, v]; ex_ <- yrs$expected
+  data.frame(
+    Location = c("Main text, Results", "Main text, Results", "Main text, Results", "Main text, Results", "Main text, Results", "Main text, Discussion", "Main text, Discussion", "Main text, Discussion", "Main text, Discussion", "Main text, Discussion",
+                 "Supplement S3", "Supplement S5", "Supplement S5", "Supplement S6", "Supplement S8"),  # the threshold diagnostics (S11(a)) were removed from the Supplement and are therefore excluded
+    `Statement in the manuscript` = c("Discharge mRS 0–2 (each of 0, 1, 2) at 15 years: died 46%–65%", "Same: alive requiring assistance 10%–12%",
+                                      "Discharge mRS 3, proportion alive and independent: 39% at 3 months", "Discharge mRS 5, proportion alive and independent: 2% or less at every time point",
+                                      "Mean survival time shorter than in the general population by 1.8 years (all patients), 0.7 years (mRS 0–2), and 3.3 years (mRS 3–5)",
+                                      "Proportion independent among survivors: 64–71% from 5 to 15 years", "Proportion alive and independent, all patients: 46% at 5 years → 24% at 15 years",
+                                      "δ = +1.0: proportion alive and independent at 15 years 20.0% vs 24.1% (4.1 percentage points lower)", "δ = +1.0: time lived independently 5.88 vs 6.15 years (0.3 years shorter)",
+                                      "Discharge mRS 1, age 65–74 years: time lived independently 9.7 years",
+                                      "Missing covariates: chronic kidney disease (9.2% in G1)", "Step function: alive 9.6, independent 6.3, requiring assistance 3.3 years", "Difference between the trapezoidal rule and the step function within 0.38 years",
+                                      "Standardization with 16 strata: time lived independently 5.4 years, proportion alive and independent at 15 years 20.3%", "Difference from the primary analysis when regenerated with δ = 0: at most 0.09 percentage points"),
+    Value = c(paste(p1(died), collapse = " / "), paste(p1(assist), collapse = " / "), p1(E("MAR", "Discharge mRS 3", "mRS 0-2", 0.25)),
+              p1(max(e15$est[e15$group == "Discharge mRS 5" & e15$outcome == "mRS 0-2" & e15$time > 0]) * 100),
+              paste(sapply(c("All patients", "Discharge mRS 0-2", "Discharge mRS 3-5"), function(g) p1(-ex(g, "difference"))), collapse = " / "),
+              V$surv_indep_range_5to15, sprintf("%.2f→%.2f", E("MAR", "All", "mRS 0-2", 5), m0i),
+              sprintf("%.2f vs %.2f (difference %.2f)", d1i, m0i, m0i - d1i), sprintf("%.3f vs %.3f (difference %.3f)", y1, y0, y0 - y1),
+              f1(yrs$by_age$indep_est[yrs$by_age$group == "Discharge mRS 1" & yrs$by_age$age == AGE_LABELS[2]]),
+              V$ckd_miss_pct, V$step_all, V$yrs_step_maxdiff, sprintf("%s years, %s%%", V$recent16_indep_est, V$recent16_p15_indep_est), sprintf("%.3f", d5m)),
+    Source = c("Table S4: 100 − (survival at 15 years)", "Table S4: survival at 15 years − proportion alive and independent at 15 years", "Table S4 (discharge mRS 3, 3 months)", "Table S4 (discharge mRS 5, maximum proportion alive and independent across time points)",
+               "Table below Figure S3: this study − general population", "Table S4: proportion alive and independent / survival in each year (minimum to maximum, 5 to 15 years)", "Table S4 (all patients, 5 and 15 years)",
+               "Table S7 δ = +1.0 and Table S4 at 15 years (all patients)", "Table S7 δ = +1.0 and Table 2 (all patients; unrounded values)", "Table S5 (discharge mRS 1, 65–74 years)",
+               "Missing chronic kidney disease in G1: 267/2,890 (Table S1)", "output/01_years_over_15y (sheet 'Step function (sensitivity)')", "Same (maximum difference across all discharge mRS groups and the 3 measures)",
+               "output/01_years_over_15y (sheet 'Recent case mix', 16 strata)",
+               "output/90_diagnostics/TableD5 (all patients, discharge mRS 0–2 and 3–5 in the 3 cohorts; survival and proportion alive and independent; all time points)"),
+    check.names = FALSE)
+}, error = function(e) { warning("Failed to create the list of values cited in the text: ", conditionMessage(e)); NULL })
 
 # =================================================================================================
 #  Save
 # =================================================================================================
 tables <- list("Table 1" = t1, "Table 2" = t2, "Table S2" = s2, "Table S3" = s3, "Table S4" = s4, "Table S5" = s5, "Table S6A" = s6a, "Table S6B" = s6b,
                "Table S7" = s7, "Table S8A" = s8a, "Table S8B" = s8b, "Table S9" = s9, "Table S10" = s10, "Table S11" = s11)
-# xlsx sheet names use the manuscript numbers (Zenodo Tables Z1–Z5 are built from these objects separately and are not written here)
-PAPER_NO <- c("Table 1" = "Table 1", "Table 2" = "Table 2", "Table S2" = "Table S2", "Table S3" = "Table S3",
-              "Table S8A" = "Table S4A", "Table S8B" = "Table S4B", "Table S9" = "Table S5", "Table S10" = "Table S6")
-paper_tables <- setNames(tables[names(PAPER_NO)], PAPER_NO)
+# xlsx sheet names use the manuscript numbers (2026-10-20 revision; the former Table S8 on prestroke mRS 0–2 was dropped from the manuscript and is kept as "Prestroke (not in paper)")
+paper_tables <- list("Table 1" = t1, "Table 2" = n2, "Table S2" = s2, "Table S3" = s3, "Table S4" = nS4, "Table S5" = nS5, "Table S6" = nS6,
+                     "Table S7" = nS7, "Table S8" = nS8, "Table S9" = nS9, "Prestroke A (not in paper)" = s8a, "Prestroke B (not in paper)" = s8b)
+tab_csv <- function(nm) if (startsWith(nm, "Prestroke")) paste0("Prestroke", substr(nm, 11, 11), "_notInPaper_data.csv") else paste0(gsub(" ", "", nm), "_data.csv")   # e.g., Table S4 → TableS4_data.csv
+for (nm in names(paper_tables)) write_csv_bom(paper_tables[[nm]], file.path(pd, tab_csv(nm)))   # one CSV per table
+# Workbook for the co-authors (2026-10-20): in manuscript order, the tables (same as in the manuscript), the source data of the figures, and the values cited in the text, in one file
+if (isTRUE(fig_src)) {
+  tabs <- paper_tables[c("Table 1", "Table 2", paste0("Table S", 2:9))]
+  guide <- data.frame(Sheet = c(names(tabs), names(fig_sheets), "Text values check"),
+    Contents = c("Table 1: G1 baseline characteristics (same as Table 1 in the manuscript)", "Table 2: years over 15 years by discharge mRS (same as Table 2 in the manuscript)", "Table S2: observation status of mRS at each assessment", "Table S3: characteristics of complete cases and patients lost to follow-up",
+                 "Table S4: mRS 0–6 distribution and survival / proportion alive and independent (all assessments)", "Table S5: years over 15 years by discharge mRS and age group", "Table S6: years over 15 years by sex (unadjusted and age-standardized)",
+                 "Table S7: estimates by missing-data handling (δ sensitivity analysis, complete-case analysis, KM estimation)", "Table S8: characteristics of G1, G2, and G3", "Table S9: G1 estimates standardized to the age-sex composition of G3",
+                 fig_readme$Contents[seq_along(fig_sheets)], "Values in the main text and Supplement that are not shown directly in a table, with their sources (which table or figure they were derived from)"))
+  guide <- rbind(guide, data.frame(Sheet = c("(Table S1)", "(All sheets)"), Contents = c("Table S1 (imputation-model predictors) is not a numerical result and appears only in the Supplemental Material.",
+    "Table sheets have the same values and order as the tables in the manuscript. Figure sheets contain the values used to draw each figure. Proportions are %, years are mean years during the 15 years after onset. Aggregates only; no individual-level data. Created by R/09_paper_items.R (reproduce with Rscript R/run_all.R).")))
+  write_xlsx_sheets(c(list(README = guide), tabs, fig_sheets, list("Text values check" = if (is.null(txt_check)) txt_tab else txt_check)), file.path(pd, "Source_data_for_figures_and_tables.xlsx"))
+}
 write_xlsx_sheets(c(paper_tables, list("Text values" = txt_tab)), file.path(pd, "Tables_main_and_supplement.xlsx"),
                   notes = c("Manuscript tables (sheet name = table number) and values cited in the text (Text values). Created by 09_paper_items.R from the estimates in work/. Proportions are % (95% CI); years are mean years during the 15 years after stroke onset (95% CI).",
                             "Table 1: G1 baseline characteristics (values are n (%) or median (interquartile range); denominators are non-missing patients for each variable). Table 2: years (06_years_lived.R), 15-year proportions (04_estimates.R), applied to the recent (G3) case mix (point estimate [range over δ = −1 to +1]).",
-                            "Table S4A uses estimates from 05_prestroke.R. δ columns in Table S5 are point estimates. Table S1 (imputation-model predictors) is written directly in the Supplemental Material. Zenodo Tables Z1–Z5 correspond to the former Tables S4, S5, S6, S7, and S11 (all tables, under their former numbers, are in paper_values.json; Z3A and Z5 are aggregated here from the imputed data (MAR)).",
+                            "In Table S4, mRS 0–6 are means across imputations; survival and the proportion alive and independent are pooled on the logit scale (95% CI). δ columns in Table S7 are point estimates. Table S9 gives point estimates [range over the primary analysis and δ = −1 to +1]. Table S1 (imputation-model predictors) is written directly in the Supplemental Material.",
+                            "Prestroke A/B (sensitivity analysis in patients with prestroke mRS 0–2) are not in the 2026-10-20 revision of the manuscript (kept for the peer-review response). Zenodo Tables Z1–Z5 (2026-10-15 version) correspond to the former Tables S4, S5, S6, S7, and S11 (all tables, under their former numbers, are in paper_values.json).",
                             "– = not calculated or outside the observation period."))
 jsonlite::write_json(list(values = V, tables = lapply(tables, function(x) list(columns = names(x), rows = unname(lapply(seq_len(nrow(x)), function(i) unname(as.character(unlist(x[i, ]))))))),
                           t1_missing = as.list(t1_miss), s10_missing = as.list(miss3)),
                      file.path(pd, "paper_values.json"), auto_unbox = TRUE, pretty = TRUE)
-writeLines(c("Index of manuscript figures/tables and output files (created by 09_paper_items.R)", "",
-             "Tables 1, 2, S2–S6; values cited in text  : Tables_main_and_supplement.xlsx (sheet name = table number; values cited in text = Text values)",
-             "Tables Z1–Z5 (Zenodo)                     : former Tables S4, S5, S6, S7, S11 (in paper_values.json under their former numbers)",
-             "Table S1 (imputation-model predictors)    : written directly in the Supplemental Material (missing counts as in the Table S6 footnote)",
-             "Figure 1  mRS distribution at each assessment          : Figure1_mRS_distribution_by_discharge_mRS.png / .pdf",
+writeLines(c("Index of manuscript figures/tables and output files (created by 09_paper_items.R; numbering of the 2026-10-20 co-author revision)", "",
+             "Tables 1, 2, S2–S9; values cited in text  : Tables_main_and_supplement.xlsx (sheet name = table number; values cited in text = Text values; for checking against the manuscript docx)",
+             "Table S1 (imputation-model predictors)    : written directly in the Supplemental Material (missing counts as in the Table S8 footnote)",
+             "Figure 1  Survival and independent survival over time  : Figure1_survival_and_independent_survival_by_discharge_mRS.png / .pdf",
              "Figure 2  15 years by discharge mRS                    : Figure2_years_by_discharge_mRS.png / .pdf",
-             "Figure 3  Survival and independent survival over time  : Figure3_survival_and_independent_survival_by_discharge_mRS.png / .pdf",
-             "Figure 4  15 years by age group                        : Figure4_years_by_age_group.png / .pdf",
+             "Figure 3  15 years by age group                        : Figure3_years_by_age_group.png / .pdf",
              "Figure S1 Selection of analyzed patients               : FigureS1_flowchart.png / .pdf",
-             "Figure S2 Comparison with general-population expected survival : FigureS2_survival_vs_general_population.png / .pdf",
-             "Figure S3 Trajectories by discharge mRS × age group    : FigureS3_by_discharge_mRS_and_age_group.png / .pdf",
-             "Figure S4 Comparison of the 3 cohorts                  : FigureS4_three_cohorts_by_discharge_mRS.png / .pdf", "",
+             "Figure S2 mRS distribution at each assessment          : FigureS2_mRS_distribution_by_discharge_mRS.png / .pdf",
+             "Figure S3 Comparison with general-population expected survival : FigureS3_survival_vs_general_population.png / .pdf (relative survival and mean years alive over 15 years below)",
+             "Figure S4 Trajectories by discharge mRS × age group    : FigureS4_by_discharge_mRS_and_age_group.png / .pdf",
+             "Figure S5 Comparison of the 3 cohorts                  : FigureS5_three_cohorts_by_discharge_mRS.png / .pdf",
+             "Workbook for the co-authors                            : Source_data_for_figures_and_tables.xlsx (sheets = Table 1, Table 2, Tables S2–S9, Figures 1–S5, Text values check; the README sheet describes each sheet)",
+             "Source data for the figures (CSV)                      : same name as each figure + _data.csv (e.g., Figure1_…png ↔ Figure1_…_data.csv)",
+             "Table values                                           : Tables_main_and_supplement.xlsx (sheet = table number). One CSV per table: Table1_data.csv, TableS4_data.csv, etc.", "",
              "Estimates at each time point, all cohorts and methods  : ../estimates_all_cohorts_all_methods_long.csv (04_estimates.R)",
              "Supplemental Methods values (fit, cross-validation, convergence) : ../90_diagnostics/<cohort>/TableD2_imputed_vs_observed_mRS_MAR.xlsx, TableD3_imputation_model_fit_MAR.xlsx (04_estimates.R); FigureD1_MICE_convergence_trace.png (03_imputation.R)",
-             "All estimates of years                                 : ../01_years_over_15y/TableY_years_alive_and_independent_over_15y_G1.xlsx (06_years_lived.R)",
+             "All estimates of years (including expected years, step function, and 16-strata standardization) : ../01_years_over_15y/TableY_years_alive_and_independent_over_15y_G1.xlsx (06_years_lived.R)",
              "Supplemental Methods values (imputation model comparison, delta = 0 regeneration) : ../90_diagnostics/TableD5_delta0_regeneration_and_model_comparison.xlsx (07_model_checks.R)",
-             "Supplemental Methods values (probability of threshold order reversal)             : ../90_diagnostics/TableD6_threshold_order_reversal.xlsx (08_threshold_check.R)",
-             "paper_values.json                                      : the tables above and values cited in the text (values used in the manuscript text and tables, JSON; table keys keep the former numbers S2–S11)"),
+             "Probability of threshold order reversal (removed from the Supplement; kept for the peer-review response) : ../90_diagnostics/TableD6_threshold_order_reversal.xlsx (08_threshold_check.R)",
+             "Tables Z1–Z5 (Zenodo, 2026-10-15 version)              : former Tables S4, S5, S6, S7, S11 (in paper_values.json under their former numbers; in the 2026-10-20 revision the contents of Z1–Z4 returned to the Supplement as Tables S4–S7)",
+             "paper_values.json                                      : tables and values cited in the text (values used in the manuscript text and tables, JSON; table keys keep the numbers used before 2026-10-15, S2–S11)"),
            file.path(pd, "00_index.txt"), useBytes = FALSE)
