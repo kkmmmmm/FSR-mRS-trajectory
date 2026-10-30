@@ -2,13 +2,14 @@
 #  09_paper_items.R  —  Create the manuscript (main text and Supplemental Material) figures and tables,
 #                       under their manuscript numbers, in output/00_paper_figures_tables/
 #
-#   Numbering of the 2026-10-20 co-author revision of the manuscript:
+#   Numbering of the manuscript (2026-10-20 co-author revision; Table S9 added and former Table S9 renumbered S10 in the 2026-10-26 version):
 #   Main text: Table 1 (G1 baseline characteristics), Table 2 (years over 15 years by discharge mRS),
 #              Figure 1 (survival and independent survival over time), Figure 2 (how the 15 years were spent by discharge mRS),
 #              Figure 3 (how the 15 years were spent by age group)
-#   Supplemental Material: Tables S2–S9, Figures S1–S5 (Table S1, the list of imputation-model predictors, is written directly in the Supplemental Material)
+#   Supplemental Material: Tables S2–S10, Figures S1–S5 (Table S1, the list of imputation-model predictors, is written directly in the Supplemental Material)
 #     Table S4 = mRS distribution and survival / independent survival (all time points), Table S5 = years by age group, Table S6 = by sex,
-#     Table S7 = by missing-data handling, Table S8 = characteristics of the 3 cohorts, Table S9 = standardization to the G3 age-sex composition.
+#     Table S7 = by missing-data handling, Table S8 = characteristics of the 3 cohorts,
+#     Table S9 = differences between G2/G3 and G1 at 5 and 10 years, Table S10 = standardization to the G3 age-sex composition.
 #     Figure S2 = mRS distribution, Figure S3 = comparison with the general population (tables of relative survival and years alive below),
 #     Figure S4 = discharge mRS × age group, Figure S5 = comparison of the 3 cohorts
 #   Zenodo: Tables Z1–Z5 (moved from the Supplement on 2026-10-15; in the 2026-10-20 revision the contents of Z1–Z4 returned to the Supplement as Tables S4–S7)
@@ -245,8 +246,13 @@ nS7 <- do.call(rbind, lapply(list(c("Survival probability, %", "Alive"), c("Prop
       `KM estimation` = if (m[2] == "Alive") cell(pick("KM_obs", g, "Alive", H15)) else "–", check.names = FALSE) }))))
 # Table S8: characteristics of the 3 cohorts (same as former Table S10)
 nS8 <- s10
-# Table S9: G1 standardized to the G3 age-sex composition (8 strata): 15-year proportions and years over 15 years (point estimate [range including δ = −1 to +1])
-nS9 <- do.call(rbind, lapply(list(c("Survival probabilities", "p15_alive", "alive"), c("Proportions alive and independent", "p15_indep", "indep")), function(m)
+# Table S9: differences between G2 or G3 and G1 (5 years: G2 − G1, G3 − G1; 10 years: G2 − G1) for all patients and discharge mRS 0–2 / 3–5 (subset of former Table S11 = Zenodo Table Z5)
+nS9 <- s11 %>% filter(`Discharge mRS` %in% c("All patients", "0–2", "3–5")) %>%
+  mutate(Outcome = ifelse(Outcome == "Survival", "Survival probability", "Proportion alive and independent"),
+         `Discharge mRS` = ifelse(`Discharge mRS` == "All patients", "All patients", sprintf("mRS %s at discharge", `Discharge mRS`))) %>%
+  rename(Group = `Discharge mRS`, `5 years: G2 − G1` = `G2 − G1, 5 y`, `5 years: G3 − G1` = `G3 − G1, 5 y`, `10 years: G2 − G1` = `G2 − G1, 10 y`)
+# Table S10 (Table S9 before the 2026-10-26 version): G1 standardized to the G3 age-sex composition (8 strata): 15-year proportions and years over 15 years (point estimate [range including δ = −1 to +1])
+nS10 <- do.call(rbind, lapply(list(c("Survival probabilities", "p15_alive", "alive"), c("Proportions alive and independent", "p15_indep", "indep")), function(m)
   data.frame(Outcome = m[1], Group = c("All patients", "Discharge mRS 0–2", "Discharge mRS 3–5"), n = big(sapply(G3S, function(g) pick("MAR", g, "Alive", 1)$n)),
              `Proportion at 15 years [range], %` = sapply(G3S, function(g) rec_cell(g, m[2])), `Time over 15 years [range], years` = sapply(G3S, function(g) rec_cell(g, m[3])), check.names = FALSE)))
 
@@ -556,16 +562,16 @@ tables <- list("Table 1" = t1, "Table 2" = t2, "Table S2" = s2, "Table S3" = s3,
                "Table S7" = s7, "Table S8A" = s8a, "Table S8B" = s8b, "Table S9" = s9, "Table S10" = s10, "Table S11" = s11)
 # xlsx sheet names use the manuscript numbers (2026-10-20 revision; the former Table S8 on prestroke mRS 0–2 was dropped from the manuscript and is kept as "Prestroke (not in paper)")
 paper_tables <- list("Table 1" = t1, "Table 2" = n2, "Table S2" = s2, "Table S3" = s3, "Table S4" = nS4, "Table S5" = nS5, "Table S6" = nS6,
-                     "Table S7" = nS7, "Table S8" = nS8, "Table S9" = nS9, "Prestroke A (not in paper)" = s8a, "Prestroke B (not in paper)" = s8b)
+                     "Table S7" = nS7, "Table S8" = nS8, "Table S9" = nS9, "Table S10" = nS10, "Prestroke A (not in paper)" = s8a, "Prestroke B (not in paper)" = s8b)
 tab_csv <- function(nm) if (startsWith(nm, "Prestroke")) paste0("Prestroke", substr(nm, 11, 11), "_notInPaper_data.csv") else paste0(gsub(" ", "", nm), "_data.csv")   # e.g., Table S4 → TableS4_data.csv
 for (nm in names(paper_tables)) write_csv_bom(paper_tables[[nm]], file.path(pd, tab_csv(nm)))   # one CSV per table
 # Workbook for the co-authors (2026-10-20): in manuscript order, the tables (same as in the manuscript), the source data of the figures, and the values cited in the text, in one file
 if (isTRUE(fig_src)) {
-  tabs <- paper_tables[c("Table 1", "Table 2", paste0("Table S", 2:9))]
+  tabs <- paper_tables[c("Table 1", "Table 2", paste0("Table S", 2:10))]
   guide <- data.frame(Sheet = c(names(tabs), names(fig_sheets), "Text values check"),
     Contents = c("Table 1: G1 baseline characteristics (same as Table 1 in the manuscript)", "Table 2: years over 15 years by discharge mRS (same as Table 2 in the manuscript)", "Table S2: observation status of mRS at each assessment", "Table S3: characteristics of complete cases and patients lost to follow-up",
                  "Table S4: mRS 0–6 distribution and survival / proportion alive and independent (all assessments)", "Table S5: years over 15 years by discharge mRS and age group", "Table S6: years over 15 years by sex (unadjusted and age-standardized)",
-                 "Table S7: estimates by missing-data handling (δ sensitivity analysis, complete-case analysis, KM estimation)", "Table S8: characteristics of G1, G2, and G3", "Table S9: G1 estimates standardized to the age-sex composition of G3",
+                 "Table S7: estimates by missing-data handling (δ sensitivity analysis, complete-case analysis, KM estimation)", "Table S8: characteristics of G1, G2, and G3", "Table S9: differences between G2 or G3 and G1 at 5 and 10 years (percentage points, 95% CI)", "Table S10: G1 estimates standardized to the age-sex composition of G3",
                  fig_readme$Contents[seq_along(fig_sheets)], "Values in the main text and Supplement that are not shown directly in a table, with their sources (which table or figure they were derived from)"))
   guide <- rbind(guide, data.frame(Sheet = c("(Table S1)", "(All sheets)"), Contents = c("Table S1 (imputation-model predictors) is not a numerical result and appears only in the Supplemental Material.",
     "Table sheets have the same values and order as the tables in the manuscript. Figure sheets contain the values used to draw each figure. Proportions are %, years are mean years during the 15 years after onset. Aggregates only; no individual-level data. Created by R/09_paper_items.R (reproduce with Rscript R/run_all.R).")))
@@ -574,14 +580,14 @@ if (isTRUE(fig_src)) {
 write_xlsx_sheets(c(paper_tables, list("Text values" = txt_tab)), file.path(pd, "Tables_main_and_supplement.xlsx"),
                   notes = c("Manuscript tables (sheet name = table number) and values cited in the text (Text values). Created by 09_paper_items.R from the estimates in work/. Proportions are % (95% CI); years are mean years during the 15 years after stroke onset (95% CI).",
                             "Table 1: G1 baseline characteristics (values are n (%) or median (interquartile range); denominators are non-missing patients for each variable). Table 2: years (06_years_lived.R), 15-year proportions (04_estimates.R), applied to the recent (G3) case mix (point estimate [range over δ = −1 to +1]).",
-                            "In Table S4, mRS 0–6 are means across imputations; survival and the proportion alive and independent are pooled on the logit scale (95% CI). δ columns in Table S7 are point estimates. Table S9 gives point estimates [range over the primary analysis and δ = −1 to +1]. Table S1 (imputation-model predictors) is written directly in the Supplemental Material.",
+                            "In Table S4, mRS 0–6 are means across imputations; survival and the proportion alive and independent are pooled on the logit scale (95% CI). δ columns in Table S7 are point estimates. Table S9 gives differences G2/G3 − G1 (percentage points, 95% CI). Table S10 gives point estimates [range over the primary analysis and δ = −1 to +1]. Table S1 (imputation-model predictors) is written directly in the Supplemental Material.",
                             "Prestroke A/B (sensitivity analysis in patients with prestroke mRS 0–2) are not in the 2026-10-20 revision of the manuscript (kept for the peer-review response). Zenodo Tables Z1–Z5 (2026-10-15 version) correspond to the former Tables S4, S5, S6, S7, and S11 (all tables, under their former numbers, are in paper_values.json).",
                             "– = not calculated or outside the observation period."))
 jsonlite::write_json(list(values = V, tables = lapply(tables, function(x) list(columns = names(x), rows = unname(lapply(seq_len(nrow(x)), function(i) unname(as.character(unlist(x[i, ]))))))),
                           t1_missing = as.list(t1_miss), s10_missing = as.list(miss3)),
                      file.path(pd, "paper_values.json"), auto_unbox = TRUE, pretty = TRUE)
-writeLines(c("Index of manuscript figures/tables and output files (created by 09_paper_items.R; numbering of the 2026-10-20 co-author revision)", "",
-             "Tables 1, 2, S2–S9; values cited in text  : Tables_main_and_supplement.xlsx (sheet name = table number; values cited in text = Text values; for checking against the manuscript docx)",
+writeLines(c("Index of manuscript figures/tables and output files (created by 09_paper_items.R; numbering of the 2026-10-26 version: Table S9 = cohort differences, Table S10 = standardization)", "",
+             "Tables 1, 2, S2–S10; values cited in text : Tables_main_and_supplement.xlsx (sheet name = table number; values cited in text = Text values; for checking against the manuscript docx)",
              "Table S1 (imputation-model predictors)    : written directly in the Supplemental Material (missing counts as in the Table S8 footnote)",
              "Figure 1  Survival and independent survival over time  : Figure1_survival_and_independent_survival_by_discharge_mRS.png / .pdf",
              "Figure 2  15 years by discharge mRS                    : Figure2_years_by_discharge_mRS.png / .pdf",
@@ -591,7 +597,7 @@ writeLines(c("Index of manuscript figures/tables and output files (created by 09
              "Figure S3 Comparison with general-population expected survival : FigureS3_survival_vs_general_population.png / .pdf (relative survival and mean years alive over 15 years below)",
              "Figure S4 Trajectories by discharge mRS × age group    : FigureS4_by_discharge_mRS_and_age_group.png / .pdf",
              "Figure S5 Comparison of the 3 cohorts                  : FigureS5_three_cohorts_by_discharge_mRS.png / .pdf",
-             "Workbook for the co-authors                            : Source_data_for_figures_and_tables.xlsx (sheets = Table 1, Table 2, Tables S2–S9, Figures 1–S5, Text values check; the README sheet describes each sheet)",
+             "Workbook for the co-authors                            : Source_data_for_figures_and_tables.xlsx (sheets = Table 1, Table 2, Tables S2–S10, Figures 1–S5, Text values check; the README sheet describes each sheet)",
              "Source data for the figures (CSV)                      : same name as each figure + _data.csv (e.g., Figure1_…png ↔ Figure1_…_data.csv)",
              "Table values                                           : Tables_main_and_supplement.xlsx (sheet = table number). One CSV per table: Table1_data.csv, TableS4_data.csv, etc.", "",
              "Estimates at each time point, all cohorts and methods  : ../estimates_all_cohorts_all_methods_long.csv (04_estimates.R)",
