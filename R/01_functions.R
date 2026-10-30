@@ -116,7 +116,7 @@ draw_coef <- function(est, V, tag) {
 }
 
 # Guard against complete separation in the death model (e.g., zero deaths in a category): pseudo-observation augmentation as in mice's logreg
-#   (White, Daniel & Royston. Stat Med 2010;29:2920-31). For each predictor, pseudo-observations with and without death are placed at
+#   (White, Daniel & Royston. Comput Stat Data Anal 2010;54:2267-75). For each predictor, pseudo-observations with and without death are placed at
 #   mean ± 0.5 SD (clipped to the observed range), with total weight w_tot patients. The mice default (number of predictors + 1) inflates
 #   the death proportion at time points with few deaths, so w_tot = AUG_WEIGHT (5) was chosen based on cross-validated calibration and stability of coefficient draws
 augment_binary <- function(x, y, w_tot = AUG_WEIGHT) {
