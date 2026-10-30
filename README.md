@@ -24,12 +24,15 @@ R/
   02_data_prep.R         Data loading, exclusions, construction of the 3 cohorts
   03_imputation.R        Multiple imputation (MAR) and delta-adjusted pattern-mixture model (MNAR)
   04_estimates.R         Estimates at each time point; imputation-model diagnostics
-  05_prestroke.R         Sensitivity analysis restricted to prestroke mRS 0-2
+  05_prestroke.R         Sensitivity analysis restricted to prestroke mRS 0-2 (*)
   06_years_lived.R       Years alive / independent / dependent over 15 years; expected years
   07_model_checks.R      Reproducibility and imputation-model checks
-  08_threshold_check.R   Ordering of proportional-odds thresholds
+  08_threshold_check.R   Ordering of proportional-odds thresholds (*)
   09_paper_items.R       Tables and figures numbered as in the manuscript
   renv.lock              R package versions
+
+  (*) Supplementary checks not reported in the manuscript; kept for transparency and peer review.
+      Outputs of 09_paper_items.R labeled "not in paper" (e.g., Prestroke A/B) are likewise not reported.
 reference/lifetable/
   japan_lifetable_qx.csv Age-, sex-, and year-specific death probabilities (qx) from the Japanese
                          abridged/complete life tables (Ministry of Health, Labour and Welfare)
