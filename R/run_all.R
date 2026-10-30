@@ -27,7 +27,7 @@ steps <- c("02_data_prep.R",        # Data loading, exclusions, and construction
            "05_prestroke.R",        # Estimates restricted to prestroke mRS 0–2 (not included in the paper; kept for responses to reviewers)
            "06_years_lived.R",      # Years alive and years independent over 15 years (primary outcome); expected years of life
            "07_model_checks.R",     # Supplemental Methods values: difference from delta = 0 regeneration, imputation model comparison (~1 h)
-           "08_threshold_check.R",  # Supplemental Methods values: probability of threshold order reversal
+           "08_threshold_check.R",  # Probability of threshold order reversal (not reported in the manuscript; for peer review)
            "09_paper_items.R")      # Manuscript figures and tables under their manuscript numbers (output/00_paper_figures_tables/)
 only <- Sys.getenv("MRS_STEPS", "")          # e.g., MRS_STEPS="04,05,06,09" runs only those steps
 if (nzchar(only)) steps <- steps[substr(steps, 1, 2) %in% strsplit(only, ",")[[1]]]
